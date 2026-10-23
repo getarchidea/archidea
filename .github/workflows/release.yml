@@ -1,37 +1,50 @@
 name: Release
 
-# Push an annotated tag like v0.2.0 (its message becomes the release notes). The app is built, packed by
-# scripts/package.sh into a disk image, an update zip, minisign signatures, SHA256SUMS.txt and latest.json, and
-# published. Secrets: MINISIGN_SECRET_KEY (the release key, required); for a Developer ID signed and notarised
-# build also MACOS_CERTIFICATE (a base64 .p12), MACOS_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD.
+# Pushing a v* tag (make release) builds the app on GitHub, packs the disk image and the update zip, signs the
+# files the in-app updater installs, and publishes the release with latest.json and SHA256SUMS.txt.
+# See docs/RELEASING.md for the keys and variables this needs.
+
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - 'v*'
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  ARCHIDEA_RELEASES: ${{ github.repository }}
+  UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
 
 jobs:
-  # A release published by hand for this tag (say, signed on a maintainer's Mac) is left as it is.
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      exists: ${{ steps.look.outputs.exists }}
+  prepare:
+    # Fails in seconds, before a build spends twenty minutes.
+    name: Check the release can go out
+    runs-on: ubuntu-24.04
     steps:
-      - id: look
+      - uses: actions/checkout@v4
+      - name: Notes in CHANGELOG.md
+        run: python3 scripts/changelog.py notes "$GITHUB_REF_NAME" > /dev/null
+      - name: Update signing key
         env:
-          GH_TOKEN: ${{ github.token }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+          if [ -z "${UPDATE_PUBLIC_KEY:-}" ] || [ -z "${UPDATE_SIGNING_KEY:-}" ]; then
+            echo "::error::Set the UPDATE_PUBLIC_KEY variable and the UPDATE_SIGNING_KEY secret (docs/RELEASING.md): a build without them could never update itself."
+            exit 1
           fi
 
-  release:
-    needs: check
-    if: needs.check.outputs.exists != 'true'
-    runs-on: macos-15
+  build:
+    name: Build macOS ${{ matrix.arch }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One download per Mac architecture. Intel (amd64) joins once there is an x86_64 engine build.
+          - os: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.os }}
     env:
       HAS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE != '' }}
       HAS_NOTARY: ${{ secrets.APPLE_ID != '' }}
@@ -44,25 +57,28 @@ jobs:
           path: vendor/engine/Chromium Framework.framework
           key: engine-${{ hashFiles('vendor/engine/ENGINE') }}
 
-      - name: Version from the tag
+      - name: Set version
         run: |
+          set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           echo "VERSION=$version" >> "$GITHUB_ENV"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" \
             -c "Set :CFBundleVersion ${{ github.run_number }}" Resources/Info.plist
 
-      - name: Import the signing certificate
+      - name: Import the Developer ID certificate
         if: env.HAS_CERTIFICATE == 'true'
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: |
+          set -euo pipefail
           keychain="$RUNNER_TEMP/signing.keychain-db"
           security create-keychain -p "" "$keychain"
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "" "$keychain"
           echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "" "$keychain"
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           identity=$(security find-identity -v -p codesigning "$keychain" | awk -F'"' '/Developer ID Application/ { print $2; exit }')
@@ -71,18 +87,10 @@ jobs:
       - name: Build
         env:
           GH_TOKEN: ${{ github.token }}
-          ARCHIDEA_RELEASES: ${{ github.repository }}
         run: ./build.sh release
 
-      - name: Package
-        env:
-          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-        run: |
-          brew install minisign >/dev/null
-          printf '%s' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
-          MINISIGN_KEY="$RUNNER_TEMP/minisign.key" scripts/package.sh "$GITHUB_REPOSITORY" "$RUNNER_TEMP/notes.md"
-          rm "$RUNNER_TEMP/minisign.key"
+      - name: Pack
+        run: scripts/package.sh "${{ matrix.arch }}"
 
       - name: Notarise
         if: env.HAS_NOTARY == 'true'
@@ -91,12 +99,92 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          xcrun notarytool submit "build/release/archidea-$VERSION-darwin-arm64.dmg" --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
-          xcrun stapler staple "build/release/archidea-$VERSION-darwin-arm64.dmg"
+          set -euo pipefail
+          dmg="build/release/archidea-$VERSION-darwin-${{ matrix.arch }}.dmg"
+          xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$dmg"
 
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Smoke test
         run: |
-          gh release create "$GITHUB_REF_NAME" build/release/* --title "Archidea $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          set -euo pipefail
+          check="$(mktemp -d)"
+          ditto -x -k "build/release/archidea-darwin-${{ matrix.arch }}.app.zip" "$check"
+          app="$check/Archidea.app"
+          plist_version="$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")"
+          [ "$plist_version" = "$VERSION" ] || { echo "::error::Info.plist says $plist_version, not $VERSION"; exit 1; }
+          key="$(plutil -extract ArchideaUpdateKey raw -o - "$app/Contents/Info.plist")"
+          [ "$key" = "$UPDATE_PUBLIC_KEY" ] || { echo "::error::the build carries no release key: it could never update"; exit 1; }
+          want="$([ "${{ matrix.arch }}" = amd64 ] && echo x86_64 || echo arm64)"
+          archs="$(lipo -archs "$app/Contents/MacOS/Archidea")"
+          [ "$archs" = "$want" ] || { echo "::error::the build is for '$archs', not $want"; exit 1; }
+          codesign --verify --deep --strict "$app"
+          data="$(mktemp -d)"
+          DRIFT_DATA_DIR="$data" "$app/Contents/MacOS/Archidea" > "$RUNNER_TEMP/run.log" 2>&1 &
+          pid=$!
+          sleep 20
+          kill -0 "$pid" || { echo "::error::Archidea exited on start"; cat "$RUNNER_TEMP/run.log"; exit 1; }
+          kill "$pid"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archidea-macos-${{ matrix.arch }}
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Release notes from CHANGELOG.md
+        run: python3 scripts/changelog.py notes "$GITHUB_REF_NAME" > release-notes.md
+
+      - name: Sign the release files
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
+          version="${GITHUB_REF_NAME#v}"
+          for file in release/*.zip release/*.dmg; do
+            name="$(basename "$file")"
+            # Ed25519 over the whole file (-l), the kind the app checks; the trusted comment ties it to this
+            # version and file (see Minisign.verify in Sources/App/Updater.swift).
+            minisign -S -l -s "$key" -t "archidea v$version $name" -m "$file" </dev/null
+          done
+          # The public key must verify what the private key signed, or no install could ever update.
+          printf '%s\n' "untrusted comment: minisign public key" "$UPDATE_PUBLIC_KEY" > pub.key
+          for file in release/*.zip; do minisign -V -p pub.key -m "$file"; done
+
+      - name: Write latest.json and checksums
+        run: |
+          set -euo pipefail
+          python3 scripts/make-latest-json.py --release-dir release --tag "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --notes-file release-notes.md
+          (cd release && sha256sum * > SHA256SUMS.txt)
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Archidea ${GITHUB_REF_NAME#v}"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+            gh release edit "$GITHUB_REF_NAME" --title "$title" --notes-file release-notes.md --latest
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --title "$title" --notes-file release-notes.md --latest
+          fi

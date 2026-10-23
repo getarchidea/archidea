@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & check
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the engine
+        uses: actions/cache@v4
+        with:
+          path: vendor/engine/Chromium Framework.framework
+          key: engine-${{ hashFiles('vendor/engine/ENGINE') }}
+
+      # build.sh also fails when a translation is missing a key.
+      - name: Build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./build.sh release
+
+      - name: Check the bundle
+        run: |
+          set -euo pipefail
+          codesign --verify --deep --strict build/Archidea.app
+          plutil -lint build/Archidea.app/Contents/Info.plist
+          [ "$(lipo -archs build/Archidea.app/Contents/MacOS/Archidea)" = arm64 ]
+
+      - name: Starts and keeps running
+        run: |
+          set -euo pipefail
+          data="$(mktemp -d)"
+          DRIFT_DATA_DIR="$data" build/Archidea.app/Contents/MacOS/Archidea > "$RUNNER_TEMP/run.log" 2>&1 &
+          pid=$!
+          sleep 20
+          kill -0 "$pid" || { echo "::error::Archidea exited on start"; cat "$RUNNER_TEMP/run.log"; exit 1; }
+          kill "$pid"

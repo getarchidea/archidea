@@ -4,10 +4,10 @@ import Security
 
 /// Updates from the project's GitHub releases. The newest release's latest.json is checked at launch and every
 /// few minutes; a newer version's app zip is downloaded and must carry Archidea's release signature (minisign),
-/// match its SHA-256 and be code-signed by the same team as this copy before it's unpacked next to the caches. It goes in when the app quits — or right away, with a restart, from the sidebar or the app menu.
+/// match its SHA-256 and carry an intact code signature before it's unpacked next to the caches. It goes in when the app quits — or right away, with a restart, from the sidebar or the app menu.
 ///
-/// The repository comes from Info.plist (`ArchideaReleases`, "owner/name", set by build.sh). Debug builds don't
-/// update themselves unless DRIFT_UPDATES=1, so a development build is never replaced by a release.
+/// The repository and the release key's public half come from Info.plist (`ArchideaReleases`, `ArchideaUpdateKey`,
+/// set by build.sh in release builds). Builds without them, and debug builds unless DRIFT_UPDATES=1, never update.
 final class Updater {
     static let shared = Updater()
 
@@ -37,8 +37,21 @@ final class Updater {
         set { UserDefaults.standard.set(newValue, forKey: Self.autoKey) }
     }
 
+    private var updateKey: String? {
+        (Bundle.main.object(forInfoDictionaryKey: "ArchideaUpdateKey") as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// The Mac's architecture as release files name it.
+    private static var arch: String {
+        #if arch(arm64)
+        return "arm64"
+        #else
+        return "amd64"
+        #endif
+    }
+
     var isEnabled: Bool {
-        guard repository != nil else { return false }
+        guard repository != nil, updateKey != nil else { return false }
         #if DEBUG
         return ProcessInfo.processInfo.environment["DRIFT_UPDATES"] == "1"
         #else
@@ -96,10 +109,10 @@ final class Updater {
            Self.isNewer(minimum, than: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)") {
             return state = .upToDate
         }
-        guard let platform = (manifest["platforms"] as? [String: Any])?["darwin-arm64"] as? [String: Any],
+        guard let platform = (manifest["platforms"] as? [String: Any])?["darwin-\(Self.arch)"] as? [String: Any],
               let link = (platform["url"] as? String).flatMap(URL.init(string:)),
               let signature = platform["signature"] as? String else {
-            return state = .failed("latest.json has no darwin-arm64 update")
+            return state = .failed("latest.json has no darwin-\(Self.arch) update")
         }
         download(version: version, from: link, sha256: platform["sha256"] as? String, signature: signature)
     }
@@ -144,8 +157,9 @@ final class Updater {
     /// Runs on the download's queue: release signature, checksum, unzip, code signature.
     private func unpack(_ zip: URL, version: String, sha256: String?, signature: String) -> Result<URL, Error> {
         let fm = FileManager.default
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "ArchideaUpdateKey") as? String,
-              Minisign.verify(signature: signature, file: zip, publicKey: key) else {
+        // The trusted comment ties the signature to this version and file, so an older signed file can't be passed off.
+        let comment = "archidea v\(version) archidea-darwin-\(Self.arch).app.zip"
+        guard let key = updateKey, Minisign.verify(signature: signature, file: zip, publicKey: key, comment: comment) else {
             return .failure(Problem(description: "the update isn't signed with Archidea's release key"))
         }
         if let sha256 {
@@ -167,28 +181,15 @@ final class Updater {
               let app = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?.first(where: { $0.pathExtension == "app" }) else {
             return .failure(Problem(description: "the zip holds no app"))
         }
-        guard Self.isSignedLikeUs(app) else { return .failure(Problem(description: "the new app isn't signed by the same team")) }
+        guard Self.hasValidSignature(app) else { return .failure(Problem(description: "the new app's code signature is broken")) }
         return .success(app)
     }
 
-    /// The new copy must carry a valid signature from the team that signed this one.
-    private static func isSignedLikeUs(_ app: URL) -> Bool {
-        guard let team = teamIdentifier(of: Bundle.main.bundleURL) else { return false }
+    /// The new copy's code signature must be intact (the release key above is what says it's ours).
+    private static func hasValidSignature(_ app: URL) -> Bool {
         var code: SecStaticCode?
-        var requirement: SecRequirement?
-        guard SecStaticCodeCreateWithPath(app as CFURL, [], &code) == errSecSuccess, let code,
-              SecRequirementCreateWithString("anchor apple generic and certificate leaf[subject.OU] = \"\(team)\"" as CFString, [],
-                                             &requirement) == errSecSuccess else { return false }
-        let flags = SecCSFlags(rawValue: kSecCSCheckNestedCode | kSecCSStrictValidate)
-        return SecStaticCodeCheckValidity(code, flags, requirement) == errSecSuccess
-    }
-
-    private static func teamIdentifier(of app: URL) -> String? {
-        var code: SecStaticCode?
-        var info: CFDictionary?
-        guard SecStaticCodeCreateWithPath(app as CFURL, [], &code) == errSecSuccess, let code,
-              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess else { return nil }
-        return (info as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] as? String
+        guard SecStaticCodeCreateWithPath(app as CFURL, [], &code) == errSecSuccess, let code else { return false }
+        return SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSCheckNestedCode | kSecCSStrictValidate), nil) == errSecSuccess
     }
 
     // MARK: installing
@@ -227,7 +228,7 @@ final class Updater {
 /// Checks a minisign signature (the Ed25519 kind made with `minisign -S -l`) against the release key built into
 /// the app: the signature over the file, and the global one over the signature and its trusted comment.
 enum Minisign {
-    static func verify(signature text: String, file: URL, publicKey: String) -> Bool {
+    static func verify(signature text: String, file: URL, publicKey: String, comment: String) -> Bool {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
         guard lines.count >= 4,
               let signature = Data(base64Encoded: lines[1]), signature.count == 74,
@@ -237,7 +238,7 @@ enum Minisign {
               let contents = try? Data(contentsOf: file, options: .mappedIfSafe),
               key.isValidSignature(Data(signature.suffix(64)), for: contents) else { return false }
         let trusted = lines[2].hasPrefix("trusted comment: ") ? String(lines[2].dropFirst("trusted comment: ".count)) : ""
-        guard let global = Data(base64Encoded: lines[3]), global.count == 64 else { return false }
+        guard trusted == comment, let global = Data(base64Encoded: lines[3]), global.count == 64 else { return false }
         return key.isValidSignature(global, for: Data(signature.suffix(64)) + Data(trusted.utf8))
     }
 }

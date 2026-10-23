@@ -1,25 +1,19 @@
 #!/bin/bash
 # Packs build/Archidea.app for a release, into build/release:
-#   archidea-<version>-darwin-arm64.dmg (+ .minisig)   the installer
-#   archidea-darwin-arm64.app.zip (+ .minisig)         what installed copies update from
-#   SHA256SUMS.txt, latest.json                         checksums, and the manifest the updater reads
-# Signatures use the release key (minisign): MINISIGN_KEY names its file, ~/.config/archidea/minisign.key otherwise.
-#   scripts/package.sh <owner/repo> [notes-file]
+#   archidea-<version>-darwin-<arch>.dmg   the installer people download
+#   archidea-darwin-<arch>.app.zip         what installed copies update from
+# Signing these and writing latest.json happen when the release is published (.github/workflows/release.yml).
+#   scripts/package.sh <arch>      arch: arm64 or amd64
 set -euo pipefail
 cd "$(dirname "$0")/.."
-repo=${1:?usage: scripts/package.sh <owner/repo> [notes-file]}
-notes=${2:-}
-key=${MINISIGN_KEY:-$HOME/.config/archidea/minisign.key}
-[ -f "$key" ] || { echo "error: no release signing key at $key" >&2; exit 1; }
-command -v minisign >/dev/null || { echo "error: minisign isn't installed (brew install minisign)" >&2; exit 1; }
+arch=${1:?usage: scripts/package.sh <arm64|amd64>}
 
 app=build/Archidea.app
 out=build/release
 plist="$app/Contents/Info.plist"
 version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
-minimum=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$plist")
-zip="archidea-darwin-arm64.app.zip"
-dmg="archidea-$version-darwin-arm64.dmg"
+zip="archidea-darwin-$arch.app.zip"
+dmg="archidea-$version-darwin-$arch.dmg"
 rm -rf "$out"
 mkdir -p "$out"
 work=$(mktemp -d)
@@ -151,29 +145,4 @@ hdiutil convert -quiet "$rw" -format ULFO -o "$out/$dmg"
 identity=${DRIFT_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application|Apple Development/ { print $2; exit }')}
 [ -n "$identity" ] && codesign --force --sign "$identity" "$out/$dmg" >/dev/null 2>&1 || true
 
-echo "› signatures, checksums, latest.json"
-for file in "$zip" "$dmg"; do
-  minisign -S -l -s "$key" -m "$out/$file" -t "archidea $version $file" -x "$out/$file.minisig" >/dev/null </dev/null
-done
-( cd "$out" && shasum -a 256 "$dmg" "$dmg.minisig" "$zip" "$zip.minisig" > SHA256SUMS.txt )
-base="https://github.com/$repo/releases/download/v$version"
-python3 - "$out" "$version" "$minimum" "$base" "$zip" "$dmg" "$notes" <<'PY'
-import json, sys, datetime, hashlib, os
-out, version, minimum, base, zip_, dmg, notes = sys.argv[1:]
-def sha(name):
-    h = hashlib.sha256()
-    with open(os.path.join(out, name), "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""): h.update(chunk)
-    return h.hexdigest()
-def entry(name):
-    return {"url": f"{base}/{name}", "sha256": sha(name), "size": os.path.getsize(os.path.join(out, name)),
-            "signature": open(os.path.join(out, name + ".minisig")).read()}
-json.dump({
-    "version": version,
-    "notes": open(notes).read().strip() if notes else "",
-    "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "minimumSystemVersion": minimum,
-    "platforms": {"darwin-arm64": {**entry(zip_), "installer": entry(dmg)}},
-}, open(os.path.join(out, "latest.json"), "w"), indent=2)
-PY
 ls -lh "$out"

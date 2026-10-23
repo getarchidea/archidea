@@ -114,7 +114,7 @@ sites you visit see what any Chromium browser sends them.
 ## Contributing
 
 Bug reports and ideas are welcome in [Issues](https://github.com/getarchidea/archidea/issues). To build Archidea
-yourself or send a change, see [CONTRIBUTING.md](CONTRIBUTING.md).
+yourself or send a change, see [CONTRIBUTING.md](CONTRIBUTING.md); maintainers cut releases as described in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## License
 

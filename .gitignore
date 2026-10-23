@@ -6,9 +6,9 @@
 
 # Maintainers' local tools (not part of the project)
 /Sources/Dev/
-/scripts/release.sh
 /scripts/make-icons.swift
-/docs/
+/docs/*
+!/docs/RELEASING.md
 
 .DS_Store
 *.xcuserstate

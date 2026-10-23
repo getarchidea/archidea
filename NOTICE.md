@@ -11,5 +11,6 @@ the following work, each under its own license.
 | Browser import readers, by Mantra Patel | `Sources/Import/ImportCore` | Apache-2.0 (see the folder's `LICENSE` and `NOTICE.md`) |
 | uBlock Origin, by Raymond Hill and contributors | the optional built-in blocker | GPL-3.0 |
 
-The engine is prebuilt from the sources above; `vendor/engine/ENGINE` pins the exact build and its checksum, and
-the engine's complete corresponding source is available from the linked repository at the commit named there.
+The engine is prebuilt from the sources above. `vendor/engine/ENGINE` pins the exact build and its checksum, and the
+engine release on GitHub ([engine-155.0.8059.84](https://github.com/getarchidea/archidea/releases/tag/engine-155.0.8059.84))
+carries its corresponding source next to the binary.

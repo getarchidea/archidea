@@ -53,6 +53,8 @@ cp Resources/Info.plist "$app/Contents/Info.plist"
 # Where updates come from: ARCHIDEA_RELEASES=owner/name, else the GitHub remote of this checkout, if any.
 releases=${ARCHIDEA_RELEASES:-$(git -C "$root" config --get remote.origin.url 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+/[^/]+)$#\1#p' | sed 's/\.git$//' || true)}
 if [ -n "$releases" ]; then /usr/libexec/PlistBuddy -c "Set :ArchideaReleases $releases" "$app/Contents/Info.plist"; fi
+# The public half of the release key: updates are installed only when signed with it. Builds without it never update.
+if [ -n "${UPDATE_PUBLIC_KEY:-}" ]; then /usr/libexec/PlistBuddy -c "Set :ArchideaUpdateKey $UPDATE_PUBLIC_KEY" "$app/Contents/Info.plist"; fi
 for table in Resources/*.lproj; do
   rm -rf "$app/Contents/Resources/$(basename "$table")"
   cp -R "$table" "$app/Contents/Resources/"
