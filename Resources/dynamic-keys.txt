@@ -69,3 +69,11 @@ icon.yellow
 icon.terracotta
 onboarding.importing.title
 onboarding.imported.title
+# plural("count.<what>", n) in ImportSummary.detail
+count.spaces
+count.pins
+count.tabs
+count.bookmarks
+count.history
+count.passwords
+count.cookies

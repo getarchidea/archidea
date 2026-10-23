@@ -211,15 +211,18 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             }
             return 0
         }()
+        // Once done, each card says what came over for it; warnings (Google's sign-in, say) go in one note above.
+        let summary: ImportSummary? = { if case let .success(summary)? = imported { return summary } else { return nil } }()
         let cards = parts.enumerated().map { index, part in
             ChoiceCard(icon: NSImage(systemSymbolName: Self.symbol(of: part), accessibilityDescription: nil), title: L("onboarding.part.\(part.rawValue)"),
-                       detail: nil, mark: index < current ? .done : index == current ? .busy : .none, selected: false) {}
+                       detail: summary?.detail(for: part), mark: index < current ? .done : index == current ? .busy : .none, selected: false,
+                       compact: true) {}
         }
         let status: NSView
         switch imported {
         case let .success(summary)?:
-            let lines = summary.lines + summary.warnings.prefix(2)
-            status = label(lines.isEmpty ? L("import.done.empty") : lines.joined(separator: "\n"), size: 12, alpha: 0.5)
+            let note = summary.lines.isEmpty ? L("import.done.empty") : summary.warnings.prefix(2).joined(separator: " ")
+            status = label(note, size: 12, alpha: 0.5)
         case let .failure(error)?:
             status = label(L("import.failed") + " " + error.localizedDescription, size: 12, alpha: 0.7)
         case nil:
@@ -414,6 +417,10 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             body.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             body.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
             body.topAnchor.constraint(equalTo: head.bottomAnchor, constant: 26),
+            // The body never runs into the buttons, however much it holds.
+            body.bottomAnchor.constraint(lessThanOrEqualTo: bar.topAnchor, constant: -24),
+            // …and takes only the height it needs; otherwise the leftover went to its first row.
+            { let snug = body.heightAnchor.constraint(equalToConstant: 0); snug.priority = .fittingSizeCompression; return snug }(),
             bar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             bar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             bar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
@@ -424,6 +431,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     private func stack(_ views: [NSView], spacing: CGFloat) -> NSStackView {
         let stack = NSStackView(views: views)
+        stack.setContentHuggingPriority(.required, for: .vertical)
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = spacing
@@ -436,6 +444,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         for start in stride(from: 0, to: views.count, by: columns) {
             let row = NSStackView(views: Array(views[start..<min(start + columns, views.count)]))
             row.spacing = 10
+            row.alignment = .top
+            // Rows keep their cards' height; free space never goes to one of them.
+            row.setContentHuggingPriority(.required, for: .vertical)
             row.arrangedSubviews.forEach { $0.widthAnchor.constraint(equalToConstant: width).isActive = true }
             rows.append(row)
         }
@@ -972,7 +983,13 @@ private final class ChoiceCard: NSView {
         name.textColor = .white.withAlphaComponent(0.92)
         name.lineBreakMode = .byTruncatingTail
         var texts: [NSView] = [name]
-        if let detail {
+        if let detail, compact {
+            let info = NSTextField(labelWithString: detail)
+            info.font = .systemFont(ofSize: 12)
+            info.textColor = .white.withAlphaComponent(0.5)
+            info.lineBreakMode = .byTruncatingTail
+            texts.append(info)
+        } else if let detail {
             let info = NSTextField(wrappingLabelWithString: detail)
             info.font = .systemFont(ofSize: 12)
             info.textColor = .white.withAlphaComponent(0.45)
@@ -1225,3 +1242,20 @@ private final class Swatch: NSView {
     override func mouseDown(with event: NSEvent) { action() }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 }
+
+#if DRIFT_DEV
+extension OnboardingWindowController {
+    /// The import step as it looks after a big import from Arc.
+    func debugShowImported() {
+        sources = ImportService.shared.sources()
+        chosen = sources.first { $0.id == "arc" } ?? sources.first
+        importParts = [.spaces, .bookmarks, .history, .passwords, .cookies]
+        var summary = ImportSummary()
+        (summary.spaces, summary.pins, summary.bookmarks, summary.history, summary.passwords, summary.cookies) = (2, 40, 4, 99_293, 117, 4_094)
+        summary.warnings = [L("import.googleNote")]
+        imported = .success(summary)
+        step = .importing
+        render(animated: false)
+    }
+}
+#endif

@@ -352,3 +352,10 @@
 "menu.help" = "Help";
 "menu.saveDiagnostics" = "Save Diagnostic Log";
 "menu.reportIssue" = "Report an Issue…";
+"count.spaces" = "%d space|%d spaces";
+"count.pins" = "%d pin|%d pins";
+"count.tabs" = "%d tab|%d tabs";
+"count.bookmarks" = "%d bookmark|%d bookmarks";
+"count.history" = "%d visit|%d visits";
+"count.passwords" = "%d password|%d passwords";
+"count.cookies" = "%d sign-in|%d sign-ins";

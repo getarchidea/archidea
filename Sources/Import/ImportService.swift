@@ -19,6 +19,21 @@ struct ImportSummary {
          (history, "import.done.history"), (passwords, "import.done.passwords"), (cookies, "import.done.cookies")]
             .filter { $0.0 > 0 }.map { L($0.1, $0.0) }
     }
+
+    /// What came over for one part, for its card ("spaces: 2 · pinned tabs: 40"); nil when nothing did.
+    func detail(for part: ImportPart) -> String? {
+        let counts: [(Int, String)]
+        switch part {
+        case .spaces: counts = [(spaces, "count.spaces"), (pins, "count.pins")]
+        case .tabs: counts = [(tabs, "count.tabs")]
+        case .bookmarks: counts = [(bookmarks, "count.bookmarks")]
+        case .history: counts = [(history, "count.history")]
+        case .passwords: counts = [(passwords, "count.passwords")]
+        case .cookies: counts = [(cookies, "count.cookies")]
+        }
+        let text = counts.filter { $0.0 > 0 }.map { plural($0.1, $0.0) }.joined(separator: " · ")
+        return text.isEmpty ? nil : text
+    }
 }
 
 /// Reads another browser's data with ImportCore and puts it where it belongs:

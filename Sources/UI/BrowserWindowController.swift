@@ -184,9 +184,16 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             guard let self, event.window === window else { return event }
             // A press into the browser window while it isn't key (just after ⌘Tab, say) would only make it key;
             // making it key first lets this very press act.
+            // After some ⌘-Tab switches macOS shows Archidea in front (its menu bar is up) while AppKit still has it
+            // inactive with no key window. Presses then reach the window, but the sidebar list ignores them until
+            // the app is active again, so a press while inactive activates the app itself, not only the window.
+            if !NSApp.isActive {
+                NSApp.activate()
+                Trace.log("press while the app is inactive; activating it (active now \(NSApp.isActive))")
+            }
             if !window.isKeyWindow {
                 Trace.log("press into a non-key window; making it key (key was \(NSApp.keyWindow.map { NSStringFromClass(type(of: $0)) } ?? "none"))")
-                window.makeKey()
+                window.makeKeyAndOrderFront(nil)
             }
             Trace.log("press \(event.type == .leftMouseDown ? "left" : "right") key=\(window.isKeyWindow) active=\(NSApp.isActive) "
                 + "on \(WindowDrag.probe(event.locationInWindow, in: window))")
@@ -213,7 +220,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         }
         let scroll = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, event.window === window else { return event }
-            return swipeSpaces(event) ? nil : event
+            return swipeSpaces(event, at: root.convert(event.locationInWindow, from: nil)) ? nil : event
         }
         monitors = [down, moved, scroll].compactMap { $0 }
     }
@@ -256,29 +263,62 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
 
     /// Two-finger horizontal swipe over the sidebar moves between spaces, like Arc.
-    private func swipeSpaces(_ event: NSEvent) -> Bool {
-        let point = root.convert(event.locationInWindow, from: nil)
-        guard sidebar.frame.contains(point), event.hasPreciseScrollingDeltas, state.spaces.count > 1 else { return false }
+    /// Two fingers across the sidebar page between spaces, as in Arc: the list follows the fingers (with a rubber
+    /// band past the first and last space), and on letting go it either carries on to the neighbour — when pulled
+    /// a quarter of the way or flicked — or springs back. The momentum after the fingers lift is swallowed.
+    private func swipeSpaces(_ event: NSEvent, at point: NSPoint) -> Bool {
+        guard event.hasPreciseScrollingDeltas, state.spaces.count > 1 else { return false }
+        if event.momentumPhase != [] { return swipeConsumed }
         switch event.phase {
         case .began:
+            guard sidebar.frame.contains(point) else { return false }
             swipe = 0
+            swipeTracking = false
             swipeConsumed = false
             return false
         case .changed:
-            guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) || swipe != 0 else { return false }
-            swipe += event.scrollingDeltaX
-            if !swipeConsumed, abs(swipe) > 70 {
-                swipeConsumed = true
-                switchSpace(by: swipe > 0 ? -1 : 1)
+            guard sidebar.frame.contains(point) || swipeTracking else { return false }
+            if !swipeTracking {
+                guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.5, abs(event.scrollingDeltaX) > 1 else { return false }
+                swipeTracking = true
             }
+            swipe += event.scrollingDeltaX
+            swipeVelocity = event.scrollingDeltaX
+            let width = sidebar.bounds.width
+            let hasNeighbour = neighbourSpace(towards: swipe) != nil
+            sidebar.swipeOffset = hasNeighbour ? max(-width, min(width, swipe)) : swipe / 3
             return true
         case .ended, .cancelled:
-            let handled = swipe != 0
+            guard swipeTracking else { return false }
+            swipeTracking = false
+            swipeConsumed = true
+            let width = sidebar.bounds.width
+            let flick = abs(swipeVelocity) > 14 && (swipeVelocity > 0) == (swipe > 0)
+            if event.phase == .ended, let next = neighbourSpace(towards: swipe), abs(swipe) > width * 0.25 || flick {
+                let outward: CGFloat = swipe > 0 ? width : -width
+                sidebar.settleSwipe(at: outward, duration: 0.16) { [weak self] in
+                    guard let self else { return }
+                    sidebar.swipeOffset = 0
+                    switchSpace(to: next)
+                }
+            } else {
+                sidebar.settleSwipe(at: 0, duration: 0.28)
+            }
             swipe = 0
-            return handled
+            return true
         default:
-            return event.momentumPhase != [] && swipeConsumed
+            return false
         }
+    }
+
+    private var swipeTracking = false
+    private var swipeVelocity: CGFloat = 0
+
+    /// The space a swipe moves to: fingers moving right bring the previous space, left the next one. None past the ends.
+    private func neighbourSpace(towards offset: CGFloat) -> Space? {
+        guard offset != 0, let index = state.spaces.firstIndex(where: { $0 === space }) else { return nil }
+        let target = index + (offset > 0 ? -1 : 1)
+        return state.spaces.indices.contains(target) ? state.spaces[target] : nil
     }
 
     /// Applies browser settings to the parts that read them.
@@ -1101,6 +1141,7 @@ extension BrowserWindowController {
     func debugReloadSidebar() { sidebar.reload() }
     func debugToggle(_ folder: SidebarItem) { sidebar.toggleFolder(folder) }
     var debugSidebar: SidebarView { sidebar }
+    func debugSwipe(_ event: NSEvent) -> Bool { swipeSpaces(event, at: NSPoint(x: sidebar.frame.midX, y: sidebar.frame.midY)) }
     var debugRoot: NSView { root }
     func debugResize(to x: CGFloat) { root.debugResize(to: x); root.layoutSubtreeIfNeeded() }
     func debugBeginResize() { root.debugBeginResize() }

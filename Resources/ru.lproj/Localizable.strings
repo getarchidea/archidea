@@ -352,3 +352,10 @@
 "menu.help" = "Справка";
 "menu.saveDiagnostics" = "Сохранить журнал диагностики";
 "menu.reportIssue" = "Сообщить о проблеме…";
+"count.spaces" = "%d спейс|%d спейса|%d спейсов";
+"count.pins" = "%d пин|%d пина|%d пинов";
+"count.tabs" = "%d вкладка|%d вкладки|%d вкладок";
+"count.bookmarks" = "%d закладка|%d закладки|%d закладок";
+"count.history" = "%d запись|%d записи|%d записей";
+"count.passwords" = "%d пароль|%d пароля|%d паролей";
+"count.cookies" = "%d вход|%d входа|%d входов";

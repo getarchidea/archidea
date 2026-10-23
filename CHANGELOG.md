@@ -5,6 +5,12 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Clicks in the sidebar no longer go dead after switching apps: a click into Archidea while macOS still treats it
+  as in the background now brings it forward properly.
+- Swipe left or right with two fingers on the sidebar to move between spaces; the list follows your fingers.
+- The import summary in onboarding shows what came over — tabs, bookmarks, history, passwords — and keeps its
+  button clear of the text.
+
 ## [0.1.1] - 2026-10-23
 
 - **Help › Save Diagnostic Log** writes what Archidea did lately to a file you can attach to an issue — no

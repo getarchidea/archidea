@@ -58,3 +58,19 @@ func L(_ key: String) -> String {
 func L(_ key: String, _ arguments: CVarArg...) -> String {
     String(format: L10n.string(key), locale: Locale(identifier: L10n.code), arguments: arguments)
 }
+
+/// A count with its noun in the right form: "2 спейса", "99 293 записи", "1 password". The string holds the forms
+/// separated by "|": one|few|many in Russian, one|other in English; "%d" is replaced by the number, grouped.
+func plural(_ key: String, _ count: Int) -> String {
+    let forms = L10n.string(key).components(separatedBy: "|")
+    let form: String
+    if L10n.code.hasPrefix("ru"), forms.count >= 3 {
+        let (tens, ones) = (count % 100, count % 10)
+        form = (11...14).contains(tens) ? forms[2] : ones == 1 ? forms[0] : (2...4).contains(ones) ? forms[1] : forms[2]
+    } else {
+        form = count == 1 ? forms[0] : forms[min(1, forms.count - 1)]
+    }
+    let number = NumberFormatter.localizedString(from: NSNumber(value: count), number: .decimal)
+    return form.replacingOccurrences(of: "%d", with: number)
+}
+

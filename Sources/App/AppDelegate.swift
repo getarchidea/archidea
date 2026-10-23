@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RefocusDemo.runIfRequested(controller)
         DragHarness.runIfRequested(controller)
         PrivateDemo.runIfRequested(self)
+        SwipeDemo.runIfRequested(controller)
         #endif
     }
 
