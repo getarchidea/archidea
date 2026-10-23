@@ -140,7 +140,13 @@ OSA
 chflags hidden "$volume/.background" "$volume/.VolumeIcon.icns"
 rm -rf "$volume/.Trashes"
 sync
-hdiutil detach -quiet "$device" || hdiutil detach -quiet -force "$device"
+# Finder can hold the volume for a moment after laying it out; let it go, then try a few times before forcing.
+osascript -e "tell application \"Finder\" to close (every window whose name is \"$disk\")" >/dev/null 2>&1 || true
+for attempt in 1 2 3 4 5 6; do
+  hdiutil detach -quiet "$device" && break
+  sleep 2
+  [ "$attempt" = 6 ] && hdiutil detach -quiet -force "$device"
+done
 hdiutil convert -quiet "$rw" -format ULFO -o "$out/$dmg"
 identity=${DRIFT_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application|Apple Development/ { print $2; exit }')}
 [ -n "$identity" ] && codesign --force --sign "$identity" "$out/$dmg" >/dev/null 2>&1 || true
