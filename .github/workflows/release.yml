@@ -1,8 +1,9 @@
 name: Release
 
-# Push a tag like v0.2.0. The app is built, signed and notarised when the signing secrets are set
-# (MACOS_CERTIFICATE: a base64 Developer ID .p12, MACOS_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_TEAM_ID,
-# APPLE_APP_PASSWORD), zipped, and published as a GitHub release that installed copies update from.
+# Push an annotated tag like v0.2.0 (its message becomes the release notes). The app is built, packed by
+# scripts/package.sh into a disk image, an update zip, minisign signatures, SHA256SUMS.txt and latest.json, and
+# published. Secrets: MINISIGN_SECRET_KEY (the release key, required); for a Developer ID signed and notarised
+# build also MACOS_CERTIFICATE (a base64 .p12), MACOS_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD.
 on:
   push:
     tags: ["v*"]
@@ -73,8 +74,15 @@ jobs:
           ARCHIDEA_RELEASES: ${{ github.repository }}
         run: ./build.sh release
 
-      - name: Zip
-        run: ditto -c -k --keepParent build/Archidea.app "build/Archidea-$VERSION.zip"
+      - name: Package
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          brew install minisign >/dev/null
+          printf '%s' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+          MINISIGN_KEY="$RUNNER_TEMP/minisign.key" scripts/package.sh "$GITHUB_REPOSITORY" "$RUNNER_TEMP/notes.md"
+          rm "$RUNNER_TEMP/minisign.key"
 
       - name: Notarise
         if: env.HAS_NOTARY == 'true'
@@ -83,14 +91,12 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          xcrun notarytool submit "build/Archidea-$VERSION.zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_APP_PASSWORD" --wait
-          xcrun stapler staple build/Archidea.app
-          rm "build/Archidea-$VERSION.zip"
-          ditto -c -k --keepParent build/Archidea.app "build/Archidea-$VERSION.zip"
+          xcrun notarytool submit "build/release/archidea-$VERSION-darwin-arm64.dmg" --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "build/release/archidea-$VERSION-darwin-arm64.dmg"
 
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "build/Archidea-$VERSION.zip" --title "Archidea $VERSION" --generate-notes
+          gh release create "$GITHUB_REF_NAME" build/release/* --title "Archidea $VERSION" --notes-file "$RUNNER_TEMP/notes.md"

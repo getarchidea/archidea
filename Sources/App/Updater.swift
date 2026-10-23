@@ -2,10 +2,9 @@ import AppKit
 import CryptoKit
 import Security
 
-/// Updates from the project's GitHub releases. The latest release is checked at launch and every few minutes
-/// (with its ETag, so an unchanged answer costs nothing against GitHub's limit); a newer one's zip is downloaded,
-/// checked against the release's SHA-256 and its code signature (same team as this copy), and unpacked next to
-/// the caches. It goes in when the app quits — or right away, with a restart, from the sidebar or the app menu.
+/// Updates from the project's GitHub releases. The newest release's latest.json is checked at launch and every
+/// few minutes; a newer version's app zip is downloaded and must carry Archidea's release signature (minisign),
+/// match its SHA-256 and be code-signed by the same team as this copy before it's unpacked next to the caches. It goes in when the app quits — or right away, with a restart, from the sidebar or the app menu.
 ///
 /// The repository comes from Info.plist (`ArchideaReleases`, "owner/name", set by build.sh). Debug builds don't
 /// update themselves unless DRIFT_UPDATES=1, so a development build is never replaced by a release.
@@ -60,15 +59,20 @@ final class Updater {
 
     // MARK: checking
 
+    /// The newest release's manifest. It's a file in the release, not an API call, so checking every few minutes
+    /// costs nothing against GitHub's limits; the ETag makes an unchanged answer tiny.
+    private var manifestURL: URL? {
+        repository.flatMap { URL(string: "https://github.com/\($0)/releases/latest/download/latest.json") }
+    }
+
     func check() {
-        guard isEnabled, let repository else { return }
+        guard isEnabled, let manifestURL else { return }
         switch state {
         case .checking, .downloading, .ready: return
         default: break
         }
         state = .checking
-        var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        var request = URLRequest(url: manifestURL)
         request.setValue("Archidea/\(currentVersion)", forHTTPHeaderField: "User-Agent")
         if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         request.cachePolicy = .reloadIgnoringLocalCacheData
@@ -81,20 +85,23 @@ final class Updater {
         guard let response, error == nil else { return state = .failed(error?.localizedDescription ?? "no response") }
         if response.statusCode == 304 { return state = .upToDate }
         guard response.statusCode == 200, let data,
-              let release = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tag = release["tag_name"] as? String else {
-            return state = .failed("GitHub answered \(response.statusCode)")
+              let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let version = manifest["version"] as? String else {
+            return state = .failed("latest.json answered \(response.statusCode)")
         }
         etag = response.value(forHTTPHeaderField: "ETag")
-        let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
         guard Self.isNewer(version, than: currentVersion) else { return state = .upToDate }
-        let assets = release["assets"] as? [[String: Any]] ?? []
-        guard let asset = assets.first(where: { ($0["name"] as? String)?.hasSuffix(".zip") == true }),
-              let link = (asset["browser_download_url"] as? String).flatMap(URL.init(string:)) else {
-            return state = .failed("release \(tag) has no .zip")
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        if let minimum = manifest["minimumSystemVersion"] as? String,
+           Self.isNewer(minimum, than: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)") {
+            return state = .upToDate
         }
-        let digest = (asset["digest"] as? String).flatMap { $0.hasPrefix("sha256:") ? String($0.dropFirst(7)) : nil }
-        download(version: version, from: link, sha256: digest)
+        guard let platform = (manifest["platforms"] as? [String: Any])?["darwin-arm64"] as? [String: Any],
+              let link = (platform["url"] as? String).flatMap(URL.init(string:)),
+              let signature = platform["signature"] as? String else {
+            return state = .failed("latest.json has no darwin-arm64 update")
+        }
+        download(version: version, from: link, sha256: platform["sha256"] as? String, signature: signature)
     }
 
     static func isNewer(_ candidate: String, than current: String) -> Bool {
@@ -114,11 +121,12 @@ final class Updater {
             .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Archidea").appendingPathComponent("Updates")
     }
 
-    private func download(version: String, from link: URL, sha256: String?) {
+    private func download(version: String, from link: URL, sha256: String?, signature: String) {
         state = .downloading(version: version)
         URLSession.shared.downloadTask(with: link) { [weak self] file, _, error in
             guard let self else { return }
-            let outcome = file.map { self.unpack($0, version: version, sha256: sha256) } ?? .failure(error ?? URLError(.badServerResponse))
+            let outcome = file.map { self.unpack($0, version: version, sha256: sha256, signature: signature) }
+                ?? .failure(error ?? URLError(.badServerResponse))
             DispatchQueue.main.async {
                 switch outcome {
                 case let .success(app):
@@ -133,9 +141,13 @@ final class Updater {
 
     private struct Problem: Error, CustomStringConvertible { let description: String }
 
-    /// Runs on the download's queue: checksum, unzip, signature.
-    private func unpack(_ zip: URL, version: String, sha256: String?) -> Result<URL, Error> {
+    /// Runs on the download's queue: release signature, checksum, unzip, code signature.
+    private func unpack(_ zip: URL, version: String, sha256: String?, signature: String) -> Result<URL, Error> {
         let fm = FileManager.default
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "ArchideaUpdateKey") as? String,
+              Minisign.verify(signature: signature, file: zip, publicKey: key) else {
+            return .failure(Problem(description: "the update isn't signed with Archidea's release key"))
+        }
         if let sha256 {
             guard let handle = try? FileHandle(forReadingFrom: zip) else { return .failure(Problem(description: "can't read the download")) }
             var hasher = SHA256()
@@ -209,5 +221,23 @@ final class Updater {
     func installOnQuit() {
         guard installsAutomatically, case .ready = state else { return }
         _ = install(relaunch: false)
+    }
+}
+
+/// Checks a minisign signature (the Ed25519 kind made with `minisign -S -l`) against the release key built into
+/// the app: the signature over the file, and the global one over the signature and its trusted comment.
+enum Minisign {
+    static func verify(signature text: String, file: URL, publicKey: String) -> Bool {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        guard lines.count >= 4,
+              let signature = Data(base64Encoded: lines[1]), signature.count == 74,
+              let keyData = Data(base64Encoded: publicKey), keyData.count == 42,
+              signature.prefix(2) == Data("Ed".utf8), Data(signature[2..<10]) == Data(keyData[2..<10]),
+              let key = try? Curve25519.Signing.PublicKey(rawRepresentation: Data(keyData.suffix(32))),
+              let contents = try? Data(contentsOf: file, options: .mappedIfSafe),
+              key.isValidSignature(Data(signature.suffix(64)), for: contents) else { return false }
+        let trusted = lines[2].hasPrefix("trusted comment: ") ? String(lines[2].dropFirst("trusted comment: ".count)) : ""
+        guard let global = Data(base64Encoded: lines[3]), global.count == 64 else { return false }
+        return key.isValidSignature(global, for: Data(signature.suffix(64)) + Data(trusted.utf8))
     }
 }

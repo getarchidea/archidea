@@ -4,6 +4,8 @@
 <dict>
 	<key>ArchideaReleases</key>
 	<string></string>
+	<key>ArchideaUpdateKey</key>
+	<string>RWQ5ceAjBQezKqMOJ7E5dp9PQAY4T6GLto0qeaFwu02J3q4S34oUktHa</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleDevelopmentRegion</key>
