@@ -188,6 +188,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                 Trace.log("press into a non-key window; making it key (key was \(NSApp.keyWindow.map { NSStringFromClass(type(of: $0)) } ?? "none"))")
                 window.makeKey()
             }
+            Trace.log("press \(event.type == .leftMouseDown ? "left" : "right") key=\(window.isKeyWindow) active=\(NSApp.isActive) "
+                + "on \(WindowDrag.probe(event.locationInWindow, in: window))")
             guard event.type == .leftMouseDown else { return event }
             if commandBar.isOpen { return event }
             if overlayShown, !sidebar.frame.insetBy(dx: -6, dy: 0).contains(root.convert(event.locationInWindow, from: nil)) { setOverlay(false) }

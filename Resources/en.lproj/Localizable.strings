@@ -349,3 +349,6 @@
 "settings.managers.apple" = "Export your passwords from the Passwords app and bring them in here.";
 "menu.newPrivateWindow" = "New Private Window";
 "private.space" = "Private";
+"menu.help" = "Help";
+"menu.saveDiagnostics" = "Save Diagnostic Log";
+"menu.reportIssue" = "Report an Issue…";

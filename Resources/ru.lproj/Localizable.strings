@@ -349,3 +349,6 @@
 "settings.managers.apple" = "Экспортируйте пароли из приложения «Пароли» и перенесите их сюда.";
 "menu.newPrivateWindow" = "Новое приватное окно";
 "private.space" = "Приватное";
+"menu.help" = "Справка";
+"menu.saveDiagnostics" = "Сохранить журнал диагностики";
+"menu.reportIssue" = "Сообщить о проблеме…";

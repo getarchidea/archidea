@@ -143,6 +143,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func passwords(_ sender: Any?) { current?.openInNewTab("chrome://password-manager/passwords") }
     @objc func settings(_ sender: Any?) { SettingsWindowController.shared.show() }
 
+    @objc func saveDiagnostics(_ sender: Any?) {
+        guard let file = Trace.save() else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([file])
+    }
+
+    @objc func reportIssue(_ sender: Any?) {
+        NSWorkspace.shared.open(URL(string: "https://github.com/getarchidea/archidea/issues/new/choose")!)
+    }
+
     @objc func checkForUpdates(_ sender: Any?) {
         let updater = Updater.shared
         guard updater.isEnabled else {

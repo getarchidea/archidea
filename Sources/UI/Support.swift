@@ -31,8 +31,13 @@ enum Theme {
 /// Diagnostics: why tabs activate, where presses go, what's key after switching apps.
 /// On with DRIFT_TRACE=1 (stderr), or `defaults write dev.drift.browser DriftTrace -bool YES`
 /// (appended to trace.log in the data folder), so it can be turned on for a normal launch too.
+/// What the app did, for bug reports. The last couple of thousand lines are always kept in memory, so when
+/// something goes wrong Help › Save Diagnostic Log writes them out without a restart. With DriftTrace on (or
+/// DRIFT_TRACE=1) every line also goes to stderr and to <data>/trace.log as it happens.
 enum Trace {
     static let enabled = ProcessInfo.processInfo.environment["DRIFT_TRACE"] == "1" || UserDefaults.standard.bool(forKey: "DriftTrace")
+    private static let capacity = 2000
+    private static var recent: [String] = []
     private static let file: FileHandle? = {
         guard UserDefaults.standard.bool(forKey: "DriftTrace") else { return nil }
         let url = Paths.root.appendingPathComponent("trace.log")
@@ -48,10 +53,27 @@ enum Trace {
     }()
 
     static func log(_ message: @autoclosure () -> String) {
+        let line = "\(stamp.string(from: Date())) \(message())"
+        recent.append(line)
+        if recent.count > capacity { recent.removeFirst(recent.count - capacity) }
         guard enabled else { return }
-        let line = "[trace] \(stamp.string(from: Date())) \(message())\n"
-        FileHandle.standardError.write(line.data(using: .utf8)!)
-        file?.write(line.data(using: .utf8)!)
+        let text = "[trace] \(line)\n"
+        FileHandle.standardError.write(text.data(using: .utf8)!)
+        file?.write(text.data(using: .utf8)!)
+    }
+
+    /// Writes what's been kept to ~/Library/Logs/Archidea and returns the file.
+    static func save() -> URL? {
+        let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Archidea")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let name = DateFormatter()
+        name.dateFormat = "yyyy-MM-dd-HHmmss"
+        let url = folder.appendingPathComponent("archidea-\(name.string(from: Date())).log")
+        let info = Bundle.main.infoDictionary
+        let header = "Archidea \(info?["CFBundleShortVersionString"] ?? "?") (\(info?["CFBundleVersion"] ?? "?")), "
+            + "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)\n"
+        guard (try? (header + recent.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }
+        return url
     }
 }
 

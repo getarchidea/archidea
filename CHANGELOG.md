@@ -5,6 +5,12 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-23
+
+- **Help › Save Diagnostic Log** writes what Archidea did lately to a file you can attach to an issue — no
+  restart or settings needed, so a problem can be captured while it's happening.
+- **Help › Report an Issue** opens the issue tracker.
+
 ## [0.1.0] - 2026-10-23
 
 The first release of Archidea — a calm, native Mac browser built around the sidebar.
