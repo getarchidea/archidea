@@ -1,0 +1,7 @@
+# The prebuilt Chromium engine (Chromium 155.0.8059.84 with privacy patches and an Objective-C API), GPL-3.0.
+# Where it comes from and where its source is: NOTICE.md.
+REPO=getarchidea/archidea
+RELEASE=engine-155.0.8059.84
+FILE=ArchideaEngine-155.0.8059.84.tar.xz
+TREE=2c67e141131843cf5c74c72f67378e891810a46b
+SHA256=8177d5324bef7f5e371bbc6b4fdc857b11605350772186b4ab0d4f8b7dcf8e62

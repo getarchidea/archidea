@@ -1,0 +1,178 @@
+import AppKit
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let store = Store()
+    private(set) var windowController: BrowserWindowController?
+    /// Open private windows; each has its own off-the-record profile.
+    private var privateWindows: [BrowserWindowController] = []
+
+    /// The browser window commands go to: the key one, else the main window.
+    var current: BrowserWindowController? {
+        privateWindows.first { $0.window.isKeyWindow || $0.window.isMainWindow } ?? windowController
+    }
+
+    /// The window a tab lives in, for the engine's requests about it.
+    func controller(for tab: ArdiaCoreTab) -> BrowserWindowController? {
+        privateWindows.first { $0.owns(tab) } ?? windowController
+    }
+
+    /// The window holding `profile`'s tabs when the engine opens a new one there (a link, a popup).
+    func controller(for profile: ArdiaCoreProfile) -> BrowserWindowController? {
+        privateWindows.first { $0.profile === profile } ?? windowController
+    }
+
+    @objc func newPrivateWindow(_ sender: Any?) {
+        guard let engine = ArdiaCoreEngine.shared else { return }
+        engine.offTheRecordProfile(for: engine.defaultProfile) { [weak self] profile, error in
+            guard let self, let profile else { return Trace.log("private window: \(error ?? "no profile")") }
+            let controller = BrowserWindowController(store: Store(ephemeral: .privateWindow()), profile: profile)
+            privateWindows.append(controller)
+            controller.showWindow()
+        }
+    }
+
+    func privateDismiss(_ requestId: String) {
+        privateWindows.forEach { $0.dismissPermissionRequest(requestId) }
+    }
+
+    func privateWindowClosed(_ controller: BrowserWindowController) {
+        privateWindows.removeAll { $0 === controller }
+    }
+
+    func start() {
+        guard let engine = ArdiaCoreEngine.shared else { return }
+        NSApp.setActivationPolicy(.regular)
+        IconChoice.apply()
+        installDisplayPass()
+        Updater.shared.start()
+        NSApp.mainMenu = Shortcuts.buildMainMenu(target: self)
+        let controller = BrowserWindowController(store: store, profile: engine.defaultProfile)
+        windowController = controller
+        if OnboardingWindowController.isNeeded {
+            // The first launch is the welcome window alone; the browser comes up once the user is through it.
+            OnboardingWindowController.shared.onFinish = { [weak controller] in
+                controller?.showWindow()
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            OnboardingWindowController.shared.show()
+        } else {
+            controller.showWindow()
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        #if DRIFT_DEV
+        SelfTest.runIfRequested(controller)
+        Demo.runIfRequested(controller)
+        Repro.runIfRequested(controller)
+        DragRepro.runIfRequested(controller)
+        FeatureDemo.runIfRequested(controller)
+        TerminateTest.runIfRequested()
+        LookDemo.runIfRequested(controller)
+        PolishDemo.runIfRequested(controller)
+        SiteDemo.runIfRequested(controller)
+        ImportDemo.runIfRequested(controller)
+        OnboardingDemo.runIfRequested()
+        ExtIconsDemo.runIfRequested(controller)
+        RefocusDemo.runIfRequested(controller)
+        DragHarness.runIfRequested(controller)
+        PrivateDemo.runIfRequested(self)
+        #endif
+    }
+
+    /// With no Chromium window on screen (the first-launch window, everything minimised) the engine's message pump
+    /// runs main-queue work without AppKit's display pass after it: views changed from timers and callbacks stayed
+    /// stale until the next mouse event. This runs that pass whenever the loop is about to sleep.
+    private func installDisplayPass() {
+        let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, 1_900_000) { _, _ in
+            for window in NSApp.windows where window.isVisible && window.viewsNeedDisplay { window.displayIfNeeded() }
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if let welcome = OnboardingWindowController.shared.window, welcome.isVisible, OnboardingWindowController.shared.onFinish != nil {
+            welcome.makeKeyAndOrderFront(nil)
+            return true
+        }
+        windowController?.showWindow()
+        return true
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { windowController?.openInNewTab(url.absoluteString) }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Trace.log("app: should terminate")
+        return .terminateNow
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        Trace.log("app: will terminate")
+        store.saveNow()
+    }
+
+    // MARK: menu actions
+
+    @objc func quit(_ sender: Any?) {
+        store.saveNow()
+        ArdiaCoreEngine.shared?.quit()
+    }
+
+    @objc func newTab(_ sender: Any?) { current?.showCommandBar(editing: false) }
+    @objc func openLocation(_ sender: Any?) { current?.showCommandBar(editing: true) }
+    @objc func closeTab(_ sender: Any?) { current?.closeSelected() }
+    @objc func togglePin(_ sender: Any?) { current?.togglePinSelected() }
+    @objc func newFolder(_ sender: Any?) { current?.newFolder() }
+    @objc func toggleSidebar(_ sender: Any?) { current?.toggleSidebar() }
+    @objc func reload(_ sender: Any?) { current?.activeTab?.reload() }
+    @objc func hardReload(_ sender: Any?) { current?.activeTab?.reloadIgnoringCache() }
+    @objc func goBack(_ sender: Any?) { current?.activeTab?.goBack() }
+    @objc func goForward(_ sender: Any?) { current?.activeTab?.goForward() }
+    @objc func find(_ sender: Any?) { current?.showFind() }
+    @objc func copyURL(_ sender: Any?) { current?.copyURL() }
+    @objc func devTools(_ sender: Any?) { current?.toggleDevTools() }
+    @objc func zoomIn(_ sender: Any?) { current?.activeTab?.zoomStep(1) }
+    @objc func zoomOut(_ sender: Any?) { current?.activeTab?.zoomStep(-1) }
+    @objc func zoomReset(_ sender: Any?) { current?.activeTab?.zoomFactor = 1 }
+    @objc func nextTab(_ sender: Any?) { current?.selectAdjacent(1) }
+    @objc func previousTab(_ sender: Any?) { current?.selectAdjacent(-1) }
+    @objc func newSpace(_ sender: Any?) { current?.newSpace() }
+    @objc func nextSpace(_ sender: Any?) { current?.switchSpace(by: 1) }
+    @objc func previousSpace(_ sender: Any?) { current?.switchSpace(by: -1) }
+    @objc func extensionsStore(_ sender: Any?) { current?.openInNewTab("https://chromewebstore.google.com/category/extensions") }
+    @objc func passwords(_ sender: Any?) { current?.openInNewTab("chrome://password-manager/passwords") }
+    @objc func settings(_ sender: Any?) { SettingsWindowController.shared.show() }
+
+    @objc func checkForUpdates(_ sender: Any?) {
+        let updater = Updater.shared
+        guard updater.isEnabled else {
+            windowController?.showNotice(L("update.notConfigured"), detail: L("update.version", updater.currentVersion))
+            return
+        }
+        if case .ready = updater.state { return updater.installNow() }
+        var answered = false
+        updater.observe { [weak self] state in
+            guard !answered else { return }
+            switch state {
+            case .upToDate:
+                answered = true
+                self?.windowController?.showNotice(L("update.upToDate"), detail: L("update.version", updater.currentVersion))
+            case let .failed(reason):
+                answered = true
+                self?.windowController?.showNotice(L("update.failed"), detail: reason)
+            case .downloading, .ready:
+                answered = true
+            default: break
+            }
+        }
+        updater.check()
+    }
+    @objc func reopenClosedTab(_ sender: Any?) { current?.reopenClosedTab() }
+    @objc func importData(_ sender: Any?) { ImportWindowController.shared.show() }
+    @objc func history(_ sender: Any?) { current?.openInNewTab("chrome://history") }
+    @objc func downloads(_ sender: Any?) { current?.openInNewTab("chrome://downloads") }
+
+    @objc func selectTabByNumber(_ sender: NSMenuItem) {
+        current?.selectTab(number: sender.tag)
+    }
+}

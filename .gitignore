@@ -1,0 +1,14 @@
+# Build output and fetched dependencies
+/build/
+/vendor/engine/Chromium Framework.framework/
+/vendor/engine/.fetch-*
+/vendor/ublock/
+
+# Maintainers' local tools (not part of the project)
+/Sources/Dev/
+/scripts/release.sh
+/scripts/make-icons.swift
+/docs/
+
+.DS_Store
+*.xcuserstate

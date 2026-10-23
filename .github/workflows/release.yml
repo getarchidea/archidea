@@ -1,0 +1,96 @@
+name: Release
+
+# Push a tag like v0.2.0. The app is built, signed and notarised when the signing secrets are set
+# (MACOS_CERTIFICATE: a base64 Developer ID .p12, MACOS_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_TEAM_ID,
+# APPLE_APP_PASSWORD), zipped, and published as a GitHub release that installed copies update from.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # A release published by hand for this tag (say, signed on a maintainer's Mac) is left as it is.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.look.outputs.exists }}
+    steps:
+      - id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: check
+    if: needs.check.outputs.exists != 'true'
+    runs-on: macos-15
+    env:
+      HAS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      HAS_NOTARY: ${{ secrets.APPLE_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the engine
+        uses: actions/cache@v4
+        with:
+          path: vendor/engine/Chromium Framework.framework
+          key: engine-${{ hashFiles('vendor/engine/ENGINE') }}
+
+      - name: Version from the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" \
+            -c "Set :CFBundleVersion ${{ github.run_number }}" Resources/Info.plist
+
+      - name: Import the signing certificate
+        if: env.HAS_CERTIFICATE == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p "" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "" "$keychain"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -v -p codesigning "$keychain" | awk -F'"' '/Developer ID Application/ { print $2; exit }')
+          echo "DRIFT_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIDEA_RELEASES: ${{ github.repository }}
+        run: ./build.sh release
+
+      - name: Zip
+        run: ditto -c -k --keepParent build/Archidea.app "build/Archidea-$VERSION.zip"
+
+      - name: Notarise
+        if: env.HAS_NOTARY == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit "build/Archidea-$VERSION.zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple build/Archidea.app
+          rm "build/Archidea-$VERSION.zip"
+          ditto -c -k --keepParent build/Archidea.app "build/Archidea-$VERSION.zip"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "build/Archidea-$VERSION.zip" --title "Archidea $VERSION" --generate-notes

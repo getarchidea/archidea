@@ -1,0 +1,32 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the engine
+        uses: actions/cache@v4
+        with:
+          path: vendor/engine/Chromium Framework.framework
+          key: engine-${{ hashFiles('vendor/engine/ENGINE') }}
+
+      - name: Build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./build.sh release
+
+      - name: Check the bundle
+        run: |
+          codesign --verify --deep --strict build/Archidea.app
+          plutil -lint build/Archidea.app/Contents/Info.plist

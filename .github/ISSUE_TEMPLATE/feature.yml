@@ -1,0 +1,11 @@
+name: Idea
+description: Something Archidea could do.
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd like and the situation where you miss it.
+    validations:
+      required: true
