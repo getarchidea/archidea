@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CommandBarDemo.runIfRequested(controller)
         DownloadsDemo.runIfRequested(controller)
         ExternalAppDemo.runIfRequested(controller)
+        MinimizeDemo.runIfRequested(controller)
         #endif
     }
 
@@ -171,6 +172,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func quit(_ sender: Any?) {
         store.saveNow()
         ArdiaCoreEngine.shared?.quit()
+    }
+
+    /// ⌘M: a browser window minimises with its own Dock tile; any other window (settings) the usual way.
+    @objc func minimize(_ sender: Any?) {
+        guard let key = NSApp.keyWindow else { return }
+        if let controller = ([windowController] + privateWindows).compactMap({ $0 }).first(where: { $0.window === key }) {
+            controller.minimize()
+        } else {
+            key.performMiniaturize(sender)
+        }
     }
 
     @objc func newTab(_ sender: Any?) { current?.showCommandBar(editing: false) }

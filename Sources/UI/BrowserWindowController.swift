@@ -1,4 +1,5 @@
 import AppKit
+import ScreenCaptureKit
 
 final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRuntimeDelegate, SidebarViewDelegate {
     let store: Store
@@ -113,10 +114,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         // Chrome's own browser window hands the keyboard back to the page whenever it becomes key again; this one is
         // ours, so it does that here. Without it, after ⌘-Tab or un-minimising the page lost focus and ⌘A, ⌘C…
         // went nowhere.
-        // A minimised window's Dock tile carries the bundle's own icon in its corner, not the chosen one;
-        // the tile is drawn here instead: the window as it looked, with the chosen icon on it.
-        NotificationCenter.default.addObserver(forName: NSWindow.willMiniaturizeNotification, object: window, queue: .main) { [weak self] _ in
-            self?.drawMiniaturizedTile()
+        // A minimised window's Dock tile carries the bundle's own icon in its corner, not the chosen one; the yellow
+        // button (and ⌘M, through the app's menu) minimise through `minimize()`, which draws the tile first.
+        if let button = window.standardWindowButton(.miniaturizeButton) {
+            button.target = self
+            button.action = #selector(minimizeTapped)
         }
         NotificationCenter.default.addObserver(forName: NSWindow.didDeminiaturizeNotification, object: window, queue: .main) { [weak self] _ in
             self?.window.dockTile.contentView = nil
@@ -348,6 +350,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     func showWindow() {
         window.makeKeyAndOrderFront(nil)
+        if !warmedUp {
+            warmedUp = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.warmUpDockTile() }
+        }
         if activeItem == nil { DispatchQueue.main.async { self.showCommandBar(editing: false) } }
     }
 
@@ -543,15 +549,77 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         window.makeKey()
     }
 
-    private func drawMiniaturizedTile() {
-        guard let snapshot = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(window.windowNumber),
-                                                     [.boundsIgnoreFraming, .bestResolution]) else { return }
+    @objc private func minimizeTapped() { minimize() }
+    private var warmedUp = false
+
+    /// Sends the window to the Dock with its own tile: the window as it looked, badged with the chosen icon (the
+    /// system would badge it with the bundle's). The picture is taken while the window is still on screen (once it
+    /// minimises it can't be) from ScreenCaptureKit's view of this app's own windows, which needs no screen
+    /// recording permission. The window goes as soon as the picture is in, or after a moment without it; before
+    /// macOS 14.4 it goes at once with the system's tile.
+    func minimize() {
+        guard !window.isMiniaturized else { return }
+        var gone = false
+        let go = { [weak self] in
+            guard let self, !gone else { return }
+            gone = true
+            window.miniaturize(nil)
+        }
+        guard #available(macOS 14.4, *) else { return go() }
+        pictureForDockTile(then: go)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: go)
+    }
+
+    /// ScreenCaptureKit's first picture takes about half a second, later ones under a tenth; a tiny picture once the
+    /// window is up means minimising never waits on that.
+    private func warmUpDockTile() {
+        guard #available(macOS 14.4, *) else { return }
+        let number = CGWindowID(window.windowNumber)
+        SCShareableContent.getCurrentProcessShareableContent { content, _ in
+            guard let target = content?.windows.first(where: { $0.windowID == number }) else { return }
+            let config = SCStreamConfiguration()
+            config.width = 16
+            config.height = 16
+            SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config) { _, _ in }
+        }
+    }
+
+    @available(macOS 14.4, *)
+    func pictureForDockTile(then done: @escaping () -> Void) {
+        let number = CGWindowID(window.windowNumber)
+        let scale = window.backingScaleFactor
+        let size = window.frame.size
+        Trace.log("dock tile: picturing the window")
+        SCShareableContent.getCurrentProcessShareableContent { [weak self] content, error in
+            Trace.log("dock tile: \(content?.windows.count ?? 0) windows listed")
+            guard let target = content?.windows.first(where: { $0.windowID == number }) else {
+                Trace.log("dock tile: no window to picture (\(error.map { "\($0)" } ?? "not listed"))")
+                return DispatchQueue.main.async(execute: done)
+            }
+            let config = SCStreamConfiguration()
+            config.width = Int(size.width * scale)
+            config.height = Int(size.height * scale)
+            config.showsCursor = false
+            config.ignoreShadowsSingleWindow = true
+            SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config) { [weak self] image, error in
+                DispatchQueue.main.async {
+                    if let image { self?.showMiniaturizedTile(image) } else {
+                        Trace.log("dock tile: capture failed (\(error.map { "\($0)" } ?? "no image"))")
+                    }
+                    done()
+                }
+            }
+        }
+    }
+
+    private func showMiniaturizedTile(_ image: CGImage) {
         let tile = window.dockTile
         let view = MiniaturizedTile(frame: NSRect(origin: .zero, size: tile.size))
-        view.snapshot = NSImage(cgImage: snapshot, size: .zero)
+        view.snapshot = NSImage(cgImage: image, size: .zero)
         view.badge = IconChoice.image(IconChoice.current)
         tile.contentView = view
         tile.display()
+        Trace.log("dock tile: drawn from a \(image.width)×\(image.height) picture")
     }
 
     /// Gives the keyboard back to the page unless something of ours holds it (the command bar, find, a rename,
