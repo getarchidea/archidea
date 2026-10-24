@@ -17,7 +17,41 @@ final class Updater {
         case upToDate
         case downloading(version: String)
         case ready(version: String)
+        /// What to tell the user; the technical reason goes to the diagnostic log.
         case failed(String)
+    }
+
+    /// Why a check or download didn't work, in words for the user.
+    private enum Failure {
+        /// No way through to GitHub: offline, a timeout, DNS, a TLS handshake that broke (a flaky network or a
+        /// proxy in the way).
+        case unreachable
+        /// GitHub answered, but not with a release we can read.
+        case server
+        /// The download didn't verify (signature, checksum, code signature) or wouldn't unpack.
+        case damaged
+
+        var message: String {
+            switch self {
+            case .unreachable: L("update.error.unreachable")
+            case .server: L("update.error.server")
+            case .damaged: L("update.error.damaged")
+            }
+        }
+
+        static func of(_ error: Error) -> Failure {
+            guard let url = error as? URLError else { return .damaged }
+            switch url.code {
+            case .badServerResponse, .badURL, .unsupportedURL, .fileDoesNotExist, .zeroByteResource, .cannotDecodeContentData,
+                 .cannotDecodeRawData, .cannotParseResponse: return .server
+            default: return .unreachable
+            }
+        }
+    }
+
+    private func fail(_ failure: Failure, _ detail: String) {
+        Trace.log("updates: \(detail)")
+        state = .failed(failure.message)
     }
 
     private(set) var state = State.idle { didSet { if state != oldValue { observers.forEach { $0(state) } } } }
@@ -95,12 +129,14 @@ final class Updater {
     }
 
     private func received(_ data: Data?, _ response: HTTPURLResponse?, _ error: Error?) {
-        guard let response, error == nil else { return state = .failed(error?.localizedDescription ?? "no response") }
+        guard let response, error == nil else {
+            return fail(error.map(Failure.of) ?? .unreachable, "check failed: \(error.map { "\($0)" } ?? "no response")")
+        }
         if response.statusCode == 304 { return state = .upToDate }
         guard response.statusCode == 200, let data,
               let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let version = manifest["version"] as? String else {
-            return state = .failed("latest.json answered \(response.statusCode)")
+            return fail(.server, "latest.json answered \(response.statusCode)")
         }
         etag = response.value(forHTTPHeaderField: "ETag")
         guard Self.isNewer(version, than: currentVersion) else { return state = .upToDate }
@@ -112,7 +148,7 @@ final class Updater {
         guard let platform = (manifest["platforms"] as? [String: Any])?["darwin-\(Self.arch)"] as? [String: Any],
               let link = (platform["url"] as? String).flatMap(URL.init(string:)),
               let signature = platform["signature"] as? String else {
-            return state = .failed("latest.json has no darwin-\(Self.arch) update")
+            return fail(.server, "latest.json has no darwin-\(Self.arch) update")
         }
         download(version: version, from: link, sha256: platform["sha256"] as? String, signature: signature)
     }
@@ -146,7 +182,7 @@ final class Updater {
                     self.staged = app
                     self.state = .ready(version: version)
                 case let .failure(problem):
-                    self.state = .failed(String(describing: problem))
+                    self.fail(problem is Problem ? .damaged : Failure.of(problem), "update \(version): \(problem)")
                 }
             }
         }.resume()

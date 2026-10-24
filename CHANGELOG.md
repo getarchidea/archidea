@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- When an update check fails, Archidea says what happened in plain words (no connection to GitHub, a bad answer,
+  an update that didn't verify) instead of the system's raw error.
+
 ## [0.1.4] - 2026-10-24
 
 - **Mini window**: a link from another app (a chat, a mail) opens in a small window of its own instead of piling

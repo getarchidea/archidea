@@ -396,3 +396,6 @@
 "settings.links.browser" = "Browser window";
 "mini.open" = "Open in Archidea";
 "mini.copyLink" = "Copy Link";
+"update.error.unreachable" = "Couldn’t reach GitHub. Check your internet connection and try again in a few minutes.";
+"update.error.server" = "GitHub didn’t return the update properly. Try again in a few minutes.";
+"update.error.damaged" = "The downloaded update didn’t pass verification, so it wasn’t installed. Archidea will try again later.";
