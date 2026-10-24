@@ -1,7 +1,7 @@
 name: CodeQL
 
-# GitHub's default code scanning can't build the app (no Xcode project or Package.swift: build.sh drives swiftc
-# against the prebuilt engine), so it quietly dropped Swift. This builds it the way CI does.
+# GitHub's default code scanning can't build the app (it needs the prebuilt engine fetched first), so it quietly
+# dropped Swift. This builds it the way CI does.
 on:
   push:
     branches: [main]
@@ -47,7 +47,7 @@ jobs:
         if: matrix.language == 'swift'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./build.sh release
+        run: make release-build
 
       - uses: github/codeql-action/analyze@v3
         with:

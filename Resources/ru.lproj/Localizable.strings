@@ -403,3 +403,8 @@
 "start.hide" = "Убрать со стартовой страницы";
 "update.downloading" = "Скачивается Archidea %@";
 "update.downloading.detail" = "Как только загрузится, внизу сайдбара появится кнопка перезапуска.";
+"space.delete.title" = "Удалить «%@»?";
+"space.delete.detail" = "В нём %@ — удаление нельзя отменить.";
+"space.delete.confirm" = "Удалить";
+"update.cantInstall" = "Archidea не может обновиться на этом месте";
+"update.cantInstall.detail" = "Перенесите Archidea в папку «Программы», откройте её оттуда и снова нажмите «Перезапустить».";

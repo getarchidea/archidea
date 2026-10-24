@@ -1,11 +1,14 @@
 # Build output and fetched dependencies
 /build/
+/.build/
+/.swiftpm/
 /vendor/engine/Chromium Framework.framework/
 /vendor/engine/.fetch-*
 /vendor/ublock/
 
 # Maintainers' local tools (not part of the project)
 /Sources/Dev/
+/Sources/Archidea/Dev/
 /scripts/make-icons.swift
 /docs/*
 !/docs/RELEASING.md
