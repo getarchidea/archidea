@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-24
+
 - **More than one window**: ⌘N opens another window on the same sidebar, and ⇧⌘W closes one. Every window has its
   own space, its own tab in front and its own sidebar shown or hidden; the spaces, pins and Today are the same in
   all of them. A page is open in one window at a time: pick a tab another window has in front and this one offers
