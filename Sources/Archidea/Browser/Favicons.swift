@@ -35,13 +35,12 @@ final class Favicons {
         scheduled = false
         guard let profile, !waiting.isEmpty else { return }
         let pages = Array(waiting.keys.prefix(500))
-        EngineCall.call("ac_favicons_get", profile: profile, args: ["pages": pages, "size": 32]) { [weak self] reply in
+        profile.services.favicons(pages: pages, size: 32) { [weak self] result in
             guard let self else { return }
-            let results = reply?["pages"] as? [String: [String: Any]] ?? [:]
+            let icons = (try? result.get()) ?? [:]
             for page in pages {
                 let callbacks = waiting.removeValue(forKey: page) ?? []
-                guard let base64 = results[page]?["png"] as? String, let data = Data(base64Encoded: base64),
-                      let image = NSImage(data: data) else {
+                guard let data = icons[page], let image = NSImage(data: data) else {
                     missing.insert(page)
                     continue
                 }

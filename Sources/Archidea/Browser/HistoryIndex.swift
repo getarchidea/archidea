@@ -22,15 +22,21 @@ final class HistoryIndex {
     func refresh(then done: @escaping () -> Void = {}) {
         guard !loading, Date().timeIntervalSince(loadedAt) > 30 else { return done() }
         loading = true
-        EngineCall.call("ac_history_query", profile: profile, args: ["maxUrls": 5000, "maxVisits": 1]) { [weak self] reply in
+        profile.services.history(maxURLs: 5000, maxVisits: 1) { [weak self] result in
             guard let self else { return }
             loading = false
             loadedAt = Date()
-            entries = (reply?["entries"] as? [[String: Any]] ?? []).compactMap { row in
-                guard let url = row["u"] as? String, url.hasPrefix("http") else { return nil }
-                let host = URL(string: url)?.host.map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? ""
-                let last = (row["v"] as? [Double])?.first.map { Date(timeIntervalSince1970: $0 / 1000) } ?? .distantPast
-                return Entry(url: url, title: row["t"] as? String ?? "", host: host, visits: row["n"] as? Int ?? 1, lastVisit: last)
+            switch result {
+            case let .success(visits):
+                entries = visits.compactMap { visit in
+                    guard visit.url.hasPrefix("http") else { return nil }
+                    let host = URL(string: visit.url)?.host.map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? ""
+                    let last = visit.times.first.map { Date(timeIntervalSince1970: $0 / 1000) } ?? .distantPast
+                    return Entry(url: visit.url, title: visit.title, host: host, visits: visit.visits, lastVisit: last)
+                }
+            case let .failure(failure):
+                Trace.log("history: \(failure)")
+                entries = []
             }
             done()
         }
