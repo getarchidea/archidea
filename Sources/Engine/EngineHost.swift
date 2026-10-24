@@ -8,6 +8,7 @@ final class EngineHost: NSObject, ArdiaCoreEngineDelegate {
     static func run() -> Int32 {
         Paths.prepare()
         OverlayScrollbars.install()
+        IncomingLinks.install()
         let env = ProcessInfo.processInfo.environment
         var args: [String] = [
             CommandLine.arguments.first ?? "Archidea",
@@ -57,6 +58,7 @@ final class EngineHost: NSObject, ArdiaCoreEngineDelegate {
         let app = AppDelegate()
         self.app = app
         NSApp.delegate = app
+        IncomingLinks.install()
         app.start()
     }
 

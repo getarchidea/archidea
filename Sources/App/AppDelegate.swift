@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.showWindow()
             NSApp.activate(ignoringOtherApps: true)
         }
+        IncomingLinks.handler = { [weak self] url in self?.openIncoming(url) }
         #if DRIFT_DEV
         SelfTest.runIfRequested(controller)
         Demo.runIfRequested(controller)
@@ -79,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SwipeDemo.runIfRequested(controller)
         CommandBarDemo.runIfRequested(controller)
         DownloadsDemo.runIfRequested(controller)
+        ExternalAppDemo.runIfRequested(controller)
         #endif
     }
 
@@ -137,7 +139,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls { windowController?.openInNewTab(url.absoluteString) }
+        urls.forEach(IncomingLinks.receive)
+    }
+
+    /// A link from another app: a new tab in the browser window, brought forward.
+    private func openIncoming(_ url: URL) {
+        guard let controller = windowController else { return }
+        if OnboardingWindowController.shared.window?.isVisible == true {
+            // Mid-welcome the browser isn't up yet; the link waits in a tab for when it is.
+            controller.openInNewTab(url.absoluteString)
+            return
+        }
+        controller.showWindow()
+        NSApp.activate()
+        controller.openInNewTab(url.absoluteString)
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

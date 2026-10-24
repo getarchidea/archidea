@@ -1142,6 +1142,34 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                               ], dismissed: { resolve("dismiss", false) }))
     }
 
+    func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, asksToOpenApp request: [String: Any]) {
+        let id = request["id"] as? String ?? ""
+        let origin = request["origin"] as? String
+        let host = origin.flatMap { URL(string: $0)?.host } ?? origin ?? tab.committedOrigin ?? ""
+        let resolve = { (open: Bool, remember: Bool) in ArdiaCoreEngine.resolveExternalApp(id, open: open, remember: remember) }
+        guard let app = request["app"] as? String else {
+            // Nothing on this Mac opens the link's kind.
+            let scheme = request["scheme"] as? String ?? ""
+            sitePrompts.add(.init(id: "app-\(id)", tab: tab, belongsToTab: true, icon: tab.favicon, host: host,
+                                  title: L("externalApp.none", scheme), buttons: [.init(title: "OK", style: .primary) { _ in resolve(false, false) }],
+                                  dismissed: { resolve(false, false) }))
+            return
+        }
+        // The app's own icon: from its bundle, else the picture the engine sends along.
+        let icon = (request["appPath"] as? String).map { NSWorkspace.shared.icon(forFile: $0) }
+            ?? (request["icon"] as? String).flatMap { $0.components(separatedBy: ",").last }.flatMap { Data(base64Encoded: $0) }.flatMap(NSImage.init(data:))
+            ?? tab.favicon
+        let name = (app as NSString).deletingPathExtension
+        var buttons: [PromptCard.Button] = [.init(title: L("common.cancel"), style: .plain) { _ in resolve(false, false) }]
+        // "Always" only where the engine can remember it (a page with an origin).
+        if !(request["remember"] is NSNull), request["remember"] != nil {
+            buttons.append(.init(title: L("externalApp.always"), style: .secondary) { _ in resolve(true, true) })
+        }
+        buttons.append(.init(title: L("externalApp.open"), style: .primary) { _ in resolve(true, false) })
+        sitePrompts.add(.init(id: "app-\(id)", tab: tab, belongsToTab: true, icon: icon, host: host,
+                              title: L("externalApp.title", name), buttons: buttons, dismissed: { resolve(false, false) }))
+    }
+
     /// A line of text from the user (a space's name), as a card instead of a modal alert.
     func ask(_ title: String, placeholder: String, value: String = "", confirm: String, completion: @escaping (String) -> Void) {
         showWindow()

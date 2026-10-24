@@ -384,3 +384,7 @@
 "downloads.cancelled" = "Отменено";
 "downloads.failed" = "Не удалось скачать";
 "downloads.units" = "байт,КБ,МБ,ГБ,ТБ";
+"externalApp.title" = "Открыть %@?";
+"externalApp.open" = "Открыть";
+"externalApp.always" = "Всегда";
+"externalApp.none" = "На этом Mac нет приложения для ссылок «%@:»";

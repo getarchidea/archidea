@@ -9,6 +9,10 @@ under *What's new*.
   left, pauses, resumes, cancels, opens files, shows them in Finder and lets you drag them out. ⇧⌘J opens it too.
   A link that only downloads a file no longer leaves an empty tab behind.
 - The Dock icon's menu opens a new tab, a private window, or any of your spaces.
+- Links from other apps (a sign-in link from a desktop app, a link in Mail) open in Archidea again, also when the link
+  is what launches it; before, Archidea only came forward.
+- A site asking to open another app does it on a card with the app's icon — Cancel, Always or Open — instead of
+  the engine's dialog.
 - The new-tab bar casts a proper shadow and dims the page behind it; the sidebar stays clickable while it's open.
 - Declining the Keychain prompt during import no longer stops the import: everything else comes over, and the
   summary says passwords stayed behind. Other import errors show their actual message.

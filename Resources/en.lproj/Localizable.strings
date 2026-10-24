@@ -384,3 +384,7 @@
 "downloads.cancelled" = "Cancelled";
 "downloads.failed" = "Couldn't finish";
 "downloads.units" = "bytes,KB,MB,GB,TB";
+"externalApp.title" = "Open %@?";
+"externalApp.open" = "Open";
+"externalApp.always" = "Always";
+"externalApp.none" = "No app on this Mac opens “%@:” links";

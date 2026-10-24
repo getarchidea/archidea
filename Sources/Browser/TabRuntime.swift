@@ -5,6 +5,7 @@ protocol TabRuntimeDelegate: AnyObject {
     func runtime(_ runtime: TabRuntime, adopt tab: ArdiaCoreTab, opener: ArdiaCoreTab?, foreground: Bool)
     func runtime(_ runtime: TabRuntime, tabDidClose item: SidebarItem)
     func runtime(_ runtime: TabRuntime, downloadTookOver item: SidebarItem)
+    func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, asksToOpenApp request: [String: Any])
     func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, didFindMatches count: Int32, active: Int32)
     func runtime(_ runtime: TabRuntime, tabNeedsActivation tab: ArdiaCoreTab)
     func runtime(_ runtime: TabRuntime, loadingOf tab: ArdiaCoreTab)
@@ -124,6 +125,12 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
 
     @objc(tabDidCommitDocument:) func tabDidCommitDocument(_ tab: ArdiaCoreTab) {
         blocked[ObjectIdentifier(tab)] = nil
+    }
+
+    /// A page wants to open another app (a `zoommtg:` or `slack:` link): we ask on a card, not the engine's dialog.
+    @objc(tab:externalAppRequest:)
+    func tab(_ tab: ArdiaCoreTab, externalAppRequest request: [String: Any]) {
+        delegate?.runtime(self, tab: tab, asksToOpenApp: request)
     }
 
     /// A tab opened only to fetch a file (a link to a download, opened in a new tab) has nothing to show once the
