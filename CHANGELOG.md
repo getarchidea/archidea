@@ -5,6 +5,11 @@ under *What's new*.
 
 ## [Unreleased]
 
+- If the saved sidebar ever can't be read back, Archidea keeps the damaged file and restores the copy from the
+  previous launch instead of starting empty.
+- Closing a private window no longer leaves its event handlers and timers running.
+- An import can no longer hang on a write the engine never answers, or start twice from onboarding.
+- Closing a pinned tab with no open Today tabs moves to another open pin.
 - New app icons, with a fine grain and soft inner depth, in all ten colours.
 - Imported tabs, bookmarks and history bring their site icons along (from Chrome, Arc, Dia, Edge, Brave, Firefox…),
   so they show before you open them again; address suggestions from history carry site icons too.

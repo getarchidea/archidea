@@ -79,6 +79,9 @@ final class ExtensionsController: NSObject, ArdiaCoreTabDelegate {
 
     private weak var host: ExtensionPopupHost?
 
+    /// Closes an open popup (its key monitor goes with it).
+    func closePopup() { host?.close() }
+
     private func closed() {
         popupTab?.delegate = nil
         if let page = popupTab, !page.closed { page.close() }

@@ -113,7 +113,7 @@ enum Shortcuts {
         }
         menu(L("menu.tabs"), tabs)
         menu(L("menu.window"), [
-            item(L("menu.minimize"), #selector(AppDelegate.minimize(_:)), "m"),
+            item(L("menu.minimize"), #selector(NSWindow.performMiniaturize(_:)), "m", nilTarget: true),
             item(L("menu.zoom"), #selector(NSWindow.performZoom(_:)), "", nilTarget: true),
         ])
         menu(L("menu.help"), [

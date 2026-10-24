@@ -11,6 +11,8 @@ enum Paths {
 
     static let chromium = root.appendingPathComponent("Chromium", isDirectory: true)
     static let state = root.appendingPathComponent("state.json")
+    /// The last state that read back fine, from the previous launch.
+    static let stateBackup = root.appendingPathComponent("state.backup.json")
     static let favicons = root.appendingPathComponent("Favicons", isDirectory: true)
 
     static func prepare() {
@@ -36,14 +38,37 @@ final class Store {
     init() {
         persists = true
         Paths.prepare()
-        if let data = try? Data(contentsOf: Paths.state),
-           let decoded = try? JSONDecoder.drift.decode(AppState.self, from: data),
-           !decoded.spaces.isEmpty {
-            state = decoded
-        } else {
-            state = AppState()
-        }
+        state = Self.load()
         archiveStaleTabs()
+    }
+
+    /// The saved sidebar. A file that doesn't read back (cut short, from a newer version) is never written over:
+    /// it's set aside under its own name and the backup from the previous launch takes its place; only with
+    /// neither does the sidebar start fresh. Every good read refreshes the backup.
+    private static func load() -> AppState {
+        let fm = FileManager.default
+        func read(_ url: URL) throws -> AppState? {
+            guard fm.fileExists(atPath: url.path) else { return nil }
+            let decoded = try JSONDecoder.drift.decode(AppState.self, from: Data(contentsOf: url))
+            return decoded.spaces.isEmpty ? nil : decoded
+        }
+        do {
+            if let state = try read(Paths.state) {
+                try? fm.removeItem(at: Paths.stateBackup)
+                try? fm.copyItem(at: Paths.state, to: Paths.stateBackup)
+                return state
+            }
+        } catch {
+            let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+            let aside = Paths.root.appendingPathComponent("state-unreadable-\(stamp).json")
+            try? fm.moveItem(at: Paths.state, to: aside)
+            Trace.log("state: state.json doesn't read (\(error)); kept as \(aside.lastPathComponent)")
+        }
+        if let backup = try? read(Paths.stateBackup) {
+            Trace.log("state: restored from the backup")
+            return backup
+        }
+        return AppState()
     }
 
     private func archiveStaleTabs() {
@@ -68,8 +93,11 @@ final class Store {
         pendingSave?.cancel()
         pendingSave = nil
         guard persists else { return }
-        guard let data = try? JSONEncoder.drift.encode(state) else { return }
-        try? data.write(to: Paths.state, options: .atomic)
+        do {
+            try JSONEncoder.drift.encode(state).write(to: Paths.state, options: .atomic)
+        } catch {
+            Trace.log("state: not saved (\(error))")
+        }
     }
 
     // MARK: favicons survive restarts, so unloaded pins keep their icons

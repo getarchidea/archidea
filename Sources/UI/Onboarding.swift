@@ -250,6 +250,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func runImport() {
+        // Return pressed twice, or Continue clicked again, mustn't start a second import over the first.
+        guard !importing, imported == nil else { return }
         guard let source = chosen, let browser else { return advance() }
         if source.family == .safari, !SafariDirect.hasAccess() { return ImportWindowController.shared.show(selecting: source) }
         let profile = source.profiles.first(where: \.isDefault) ?? source.profiles.first
@@ -343,7 +345,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
                 NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpenURLsWithScheme: scheme) { _ in }
             }
         }
-        if preferences.atLogin { try? SMAppService.mainApp.register() } else { try? SMAppService.mainApp.unregister() }
+        do {
+            if preferences.atLogin { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        } catch {
+            Trace.log("open at login: \(error)")
+        }
     }
 
     private func readyView() -> NSView {

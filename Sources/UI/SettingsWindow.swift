@@ -584,7 +584,9 @@ enum Relaunch {
         let path = Bundle.main.bundlePath
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done; open \"\(path)\""]
+        // The path goes in as an argument, not into the script, so no character in it can change what runs.
+        task.arguments = ["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; open \"$2\"",
+                          "relaunch", "\(ProcessInfo.processInfo.processIdentifier)", path]
         try? task.run()
         (NSApp.delegate as? AppDelegate)?.quit(nil)
     }

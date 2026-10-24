@@ -29,10 +29,19 @@ enum IconChoice {
         }
     }
 
+    private static let changed = Notification.Name("IconChoiceChanged")
+
+    /// Runs after the user picks another icon (minimised windows redraw their tile).
+    @discardableResult
+    static func onChange(_ handler: @escaping () -> Void) -> NSObjectProtocol {
+        NotificationCenter.default.addObserver(forName: changed, object: nil, queue: .main) { _ in handler() }
+    }
+
     static func choose(_ id: String) {
         UserDefaults.standard.set(id, forKey: key)
         UserDefaults.standard.synchronize()
         if let image = image(id) { NSApp.applicationIconImage = image }
+        NotificationCenter.default.post(name: changed, object: nil)
         // The Dock's plug-in (Sources/DockTile) redraws the tile it shows while the app isn't running.
         DistributedNotificationCenter.default().postNotificationName(Notification.Name("app.archidea.browser.IconChanged"),
                                                                      object: nil, deliverImmediately: true)

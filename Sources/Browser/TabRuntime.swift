@@ -32,6 +32,12 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
         sleepTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.discardIdleTabs() }
     }
 
+    /// The window is going: idle tabs no longer need putting to sleep.
+    func stop() {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+    }
+
     func liveTab(for item: SidebarItem) -> ArdiaCoreTab? {
         guard let tab = tabs[item.id], !tab.closed else { return nil }
         return tab

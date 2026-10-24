@@ -15,13 +15,13 @@ final class CertificateViewer: NSObject, URLSessionDelegate {
 
     static func show(for url: URL, in window: NSWindow) {
         guard url.scheme == "https", let host = url.host else { return }
-        let viewer = CertificateViewer(window: window)
-        running.append(viewer)
         var components = URLComponents()
         components.scheme = "https"
         components.host = host
         components.port = url.port
         guard let target = components.url else { return }
+        let viewer = CertificateViewer(window: window)
+        running.append(viewer)
         let session = URLSession(configuration: .ephemeral, delegate: viewer, delegateQueue: .main)
         viewer.session = session
         var request = URLRequest(url: target)

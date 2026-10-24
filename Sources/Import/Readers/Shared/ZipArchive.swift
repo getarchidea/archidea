@@ -58,6 +58,9 @@ struct ZipArchive {
     entries = list
   }
 
+  /// Far above anything a browser export holds.
+  static let maxEntrySize = 1 << 30
+
   func extract(_ entry: Entry) throws -> Data {
     let o = entry.localHeaderOffset
     guard o + 30 <= data.count else { throw ImportError.unreadable("Damaged zip entry") }
@@ -72,6 +75,8 @@ struct ZipArchive {
       return body
     case 8:
       guard entry.size > 0 else { return Data() }
+      // The size comes from the archive itself; a doctored one mustn't make us allocate gigabytes.
+      guard entry.size <= Self.maxEntrySize else { throw ImportError.unreadable("\(entry.name) is too large") }
       var out = Data(count: entry.size)
       let written = out.withUnsafeMutableBytes { dst in
         body.withUnsafeBytes { src in

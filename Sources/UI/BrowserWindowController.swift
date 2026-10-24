@@ -1,5 +1,4 @@
 import AppKit
-import ScreenCaptureKit
 
 final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRuntimeDelegate, SidebarViewDelegate {
     let store: Store
@@ -37,6 +36,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     private lazy var sitePrompts = SitePrompts(host: content, activeTab: { [weak self] in self?.shownTab })
     private var devToolsViews: [ObjectIdentifier: NSView] = [:]
     private var monitors: [Any] = []
+    /// Notification observers, removed with the window (a private window comes and goes; the main one lives on).
+    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var overlayShown = false
     private var overlayHide: DispatchWorkItem?
     private var swipe: CGFloat = 0
@@ -106,7 +107,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         TrafficLights.install(on: window)
         // Coming back from another app, AppKit may leave no window key; then clicks only focus the window
         // and cursor changes stop, so the browser window takes key status back itself.
-        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+        observe(NSApplication.didBecomeActiveNotification, object: nil) { [weak self] _ in
             DispatchQueue.main.async { self?.reclaimKeyWindow() }
             // A password manager installed while Drift ran becomes reachable for its extension.
             DispatchQueue.global(qos: .utility).async { PasswordManagers.sync(into: Paths.chromium) }
@@ -114,27 +115,35 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         // Chrome's own browser window hands the keyboard back to the page whenever it becomes key again; this one is
         // ours, so it does that here. Without it, after ⌘-Tab or un-minimising the page lost focus and ⌘A, ⌘C…
         // went nowhere.
-        // A minimised window's Dock tile carries the bundle's own icon in its corner, not the chosen one; the yellow
-        // button (and ⌘M, through the app's menu) minimise through `minimize()`, which draws the tile first.
-        if let button = window.standardWindowButton(.miniaturizeButton) {
-            button.target = self
-            button.action = #selector(minimizeTapped)
+        // A minimised window's Dock tile carries the icon file inside the bundle in its corner, not the chosen
+        // icon; with another icon chosen the tile is drawn here: the window as it looked, with that icon on it.
+        observe(NSWindow.willMiniaturizeNotification, object: window) { [weak self] _ in
+            self?.drawMiniaturizedTile()
         }
-        NotificationCenter.default.addObserver(forName: NSWindow.didDeminiaturizeNotification, object: window, queue: .main) { [weak self] _ in
+        let iconChanged = IconChoice.onChange { [weak self] in
+            guard let self, window.isMiniaturized else { return }
+            if IconChoice.current == IconChoice.ids[0] {
+                window.dockTile.contentView = nil
+            } else if let tile = window.dockTile.contentView as? MiniaturizedTile {
+                tile.badge = IconChoice.image(IconChoice.current)
+            }
+            window.dockTile.display()
+        }
+        observers.append((NotificationCenter.default, iconChanged))
+        observe(NSWindow.didDeminiaturizeNotification, object: window) { [weak self] _ in
             self?.window.dockTile.contentView = nil
         }
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didDeminiaturizeNotification] {
-            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
+            observe(name, object: window) { [weak self] note in
                 DispatchQueue.main.async { self?.restorePageFocus(after: note.name.rawValue) }
             }
         }
-        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
-                                                            object: nil, queue: .main) { [weak self] _ in
+        observe(Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, in: DistributedNotificationCenter.default()) { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.applyTheme(of: self.space) }
         }
         for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
-            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+            observe(name, object: window) { [weak self] _ in
                 guard let self else { return }
                 TrafficLights.retile(window)
                 applySidebarMode(animated: false)
@@ -211,7 +220,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         }
         if Trace.enabled {
             // For focus reports: every ⌘ key as it arrives, with the window it goes to and who holds the keyboard.
-            _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 if event.modifierFlags.contains(.command) {
                     let key = NSApp.keyWindow
                     Trace.log("key ⌘\(event.charactersIgnoringModifiers ?? "?") arrives: event window=\(event.window.map { NSStringFromClass(type(of: $0)) } ?? "none"), "
@@ -220,6 +229,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                 }
                 return event
             }
+            monitors += [keys].compactMap { $0 }
         }
         let moved = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
             self?.trackPointer(event)
@@ -229,7 +239,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             guard let self, event.window === window else { return event }
             return swipeSpaces(event, at: root.convert(event.locationInWindow, from: nil)) ? nil : event
         }
-        monitors = [down, moved, scroll].compactMap { $0 }
+        monitors += [down, moved, scroll].compactMap { $0 }
     }
 
     // MARK: sidebar modes
@@ -350,10 +360,6 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     func showWindow() {
         window.makeKeyAndOrderFront(nil)
-        if !warmedUp {
-            warmedUp = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.warmUpDockTile() }
-        }
         if activeItem == nil { DispatchQueue.main.async { self.showCommandBar(editing: false) } }
     }
 
@@ -489,7 +495,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         let list = space.isPinned(item) ? space.today : orderedTabs
         guard let index = list.firstIndex(where: { $0 === item }) else { return space.today.first }
         let rest = list.filter { $0 !== item && runtime.liveTab(for: $0) != nil }
-        if rest.isEmpty { return nil }
+        // A closed pin with no open Today tabs goes to another open pin rather than an empty window.
+        if rest.isEmpty {
+            return space.isPinned(item) ? orderedTabs.first { $0 !== item && runtime.liveTab(for: $0) != nil } : nil
+        }
         let after = list[(index + 1)...].first { $0 !== item && runtime.liveTab(for: $0) != nil }
         return after ?? rest.last
     }
@@ -549,67 +558,15 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         window.makeKey()
     }
 
-    @objc private func minimizeTapped() { minimize() }
-    private var warmedUp = false
-
-    /// Sends the window to the Dock with its own tile: the window as it looked, badged with the chosen icon (the
-    /// system would badge it with the bundle's). The picture is taken while the window is still on screen (once it
-    /// minimises it can't be) from ScreenCaptureKit's view of this app's own windows, which needs no screen
-    /// recording permission. The window goes as soon as the picture is in, or after a moment without it; before
-    /// macOS 14.4 it goes at once with the system's tile.
-    func minimize() {
-        guard !window.isMiniaturized else { return }
-        var gone = false
-        let go = { [weak self] in
-            guard let self, !gone else { return }
-            gone = true
-            window.miniaturize(nil)
+    /// Only needed when the chosen icon isn't the bundle's own: then the system's tile would carry the wrong one.
+    /// The window is still on screen when this runs, so it's pictured as it looked.
+    private func drawMiniaturizedTile() {
+        window.dockTile.contentView = nil
+        guard IconChoice.current != IconChoice.ids[0] else { return }
+        guard let image = WindowPicture.take(window) else {
+            return Trace.log("dock tile: no picture of the window; the system's tile shows")
         }
-        guard #available(macOS 14.4, *) else { return go() }
-        pictureForDockTile(then: go)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: go)
-    }
-
-    /// ScreenCaptureKit's first picture takes about half a second, later ones under a tenth; a tiny picture once the
-    /// window is up means minimising never waits on that.
-    private func warmUpDockTile() {
-        guard #available(macOS 14.4, *) else { return }
-        let number = CGWindowID(window.windowNumber)
-        SCShareableContent.getCurrentProcessShareableContent { content, _ in
-            guard let target = content?.windows.first(where: { $0.windowID == number }) else { return }
-            let config = SCStreamConfiguration()
-            config.width = 16
-            config.height = 16
-            SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config) { _, _ in }
-        }
-    }
-
-    @available(macOS 14.4, *)
-    func pictureForDockTile(then done: @escaping () -> Void) {
-        let number = CGWindowID(window.windowNumber)
-        let scale = window.backingScaleFactor
-        let size = window.frame.size
-        Trace.log("dock tile: picturing the window")
-        SCShareableContent.getCurrentProcessShareableContent { [weak self] content, error in
-            Trace.log("dock tile: \(content?.windows.count ?? 0) windows listed")
-            guard let target = content?.windows.first(where: { $0.windowID == number }) else {
-                Trace.log("dock tile: no window to picture (\(error.map { "\($0)" } ?? "not listed"))")
-                return DispatchQueue.main.async(execute: done)
-            }
-            let config = SCStreamConfiguration()
-            config.width = Int(size.width * scale)
-            config.height = Int(size.height * scale)
-            config.showsCursor = false
-            config.ignoreShadowsSingleWindow = true
-            SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config) { [weak self] image, error in
-                DispatchQueue.main.async {
-                    if let image { self?.showMiniaturizedTile(image) } else {
-                        Trace.log("dock tile: capture failed (\(error.map { "\($0)" } ?? "no image"))")
-                    }
-                    done()
-                }
-            }
-        }
+        showMiniaturizedTile(image)
     }
 
     private func showMiniaturizedTile(_ image: CGImage) {
@@ -619,7 +576,6 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         view.badge = IconChoice.image(IconChoice.current)
         tile.contentView = view
         tile.display()
-        Trace.log("dock tile: drawn from a \(image.width)×\(image.height) picture")
     }
 
     /// Gives the keyboard back to the page unless something of ours holds it (the command bar, find, a rename,
@@ -1179,10 +1135,30 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                               dismissed: { [weak tab] in tab?.resolvePasswordPrompt(decline, username: nil, password: nil) }))
     }
 
+    private func observe(_ name: Notification.Name, object: Any?, in center: NotificationCenter = .default,
+                         _ block: @escaping (Notification) -> Void) {
+        observers.append((center, center.addObserver(forName: name, object: object, queue: .main, using: block)))
+    }
+
+    /// A closing private window takes its event monitors, observers and timers with it; left behind they'd run on
+    /// every mouse move for good.
+    private func tearDown() {
+        Trace.log("private window closes: \(monitors.count) event monitors, \(observers.count) observers go")
+        monitors.forEach(NSEvent.removeMonitor)
+        monitors.removeAll()
+        observers.forEach { $0.0.removeObserver($0.1) }
+        observers.removeAll()
+        downloadsObserver.map(Downloads.shared.stopObserving)
+        downloadsObserver = nil
+        runtime.stop()
+        extensions.closePopup()
+    }
+
     @objc(windowShouldClose:)
     func windowShouldClose(_ window: ArdiaCoreWindow) -> Bool {
         if isPrivate {
             // Closing a private window ends it: its tabs, and with them the off-the-record profile, go away.
+            tearDown()
             (NSApp.delegate as? AppDelegate)?.privateWindowClosed(self)
             return true
         }
@@ -1403,9 +1379,24 @@ final class LoadingBar: NSView {
 }
 
 /// A minimised window in the Dock: its picture, scaled to fit, with the app's chosen icon in the corner.
+/// A picture of one of our own windows, as the Dock would show it minimised. CGWindowListCreateImage needs no
+/// screen recording permission for the app's own windows, where ScreenCaptureKit's replacement may ask for it;
+/// it's looked up at run time because the SDK marks it deprecated, and Swift can't silence that per call.
+enum WindowPicture {
+    private typealias Create = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+    private static let create: Create? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage")
+        .map { unsafeBitCast($0, to: Create.self) }
+
+    static func take(_ window: NSWindow) -> CGImage? {
+        let options: CGWindowImageOption = [.boundsIgnoreFraming, .bestResolution]
+        return create?(.null, CGWindowListOption.optionIncludingWindow.rawValue, CGWindowID(window.windowNumber), options.rawValue)?
+            .takeRetainedValue()
+    }
+}
+
 final class MiniaturizedTile: NSView {
     var snapshot: NSImage?
-    var badge: NSImage?
+    var badge: NSImage? { didSet { needsDisplay = true } }
 
     override func draw(_ dirtyRect: NSRect) {
         if let snapshot, snapshot.size.width > 0 {

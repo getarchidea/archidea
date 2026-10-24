@@ -237,7 +237,7 @@ final class ImportService {
                 summary.bookmarks = ops.filter { $0["k"] as? String == "u" }.count
                 Self.sequence(stride(from: 0, to: ops.count, by: 500).map { start in
                     { (after: @escaping () -> Void) in
-                        EngineCall.call("ac_bookmarks_apply", profile: profile, args: ["ops": Array(ops[start..<min(start + 500, ops.count)])]) { _ in after() }
+                        EngineCall.call("ac_bookmarks_apply", profile: profile, args: ["ops": Array(ops[start..<min(start + 500, ops.count)])], timeout: Self.stepTimeout) { _ in after() }
                     }
                 }, then: next)
             }
@@ -248,7 +248,7 @@ final class ImportService {
                 let rows = read.history.map { ["u": $0.url, "t": $0.title, "n": $0.visits, "l": $0.lastVisit] as [String: Any] }
                 Self.sequence(stride(from: 0, to: rows.count, by: 2000).map { start in
                     { (after: @escaping () -> Void) in
-                        EngineCall.call("ac_history_import", profile: profile, args: ["rows": Array(rows[start..<min(start + 2000, rows.count)])]) { reply in
+                        EngineCall.call("ac_history_import", profile: profile, args: ["rows": Array(rows[start..<min(start + 2000, rows.count)])], timeout: Self.stepTimeout) { reply in
                             if reply?["error"] == nil { summary.history += min(2000, rows.count - start) }
                             after()
                         }
@@ -271,7 +271,7 @@ final class ImportService {
                                                                                  "password": credential.password])) ?? Data()
                         json.append(0)
                         json.withUnsafeBytes { bytes in
-                            EngineCall.callSecret("ac_passwords_add", profile: profile, json: bytes) { reply in
+                            EngineCall.callSecret("ac_passwords_add", profile: profile, json: bytes, timeout: Self.stepTimeout) { reply in
                                 if let reply, reply["error"] == nil { summary.passwords += 1 }
                                 after()
                             }
@@ -293,7 +293,7 @@ final class ImportService {
                 Self.sequence(wire.batches.map { batch in
                     { after in
                         batch.withUnsafeBytes { bytes in
-                            EngineCall.callSecret("ac_cookies_import", profile: profile, json: bytes) { reply in
+                            EngineCall.callSecret("ac_cookies_import", profile: profile, json: bytes, timeout: Self.stepTimeout) { reply in
                                 summary.cookies += reply?["imported"] as? Int ?? 0
                                 after()
                             }
@@ -316,7 +316,7 @@ final class ImportService {
                         { (after: @escaping () -> Void) in
                             guard let png = Self.png(icons[index].data) else { return after() }
                             EngineCall.call("ac_favicons_set", profile: profile,
-                                            args: ["page": icons[index].page, "icon": icons[index].icon, "png": png.base64EncodedString()]) { _ in after() }
+                                            args: ["page": icons[index].page, "icon": icons[index].icon, "png": png.base64EncodedString()], timeout: Self.stepTimeout) { _ in after() }
                         }
                     }, then: { group.leave() })
                 }
@@ -345,6 +345,10 @@ final class ImportService {
         NSGraphicsContext.restoreGraphicsState()
         return rep.representation(using: .png, properties: [:])
     }
+
+    /// How long one write to the engine may take before the import moves on without it: a lost reply must not
+    /// leave the import spinning for good.
+    private static let stepTimeout: TimeInterval = 60
 
     /// Runs asynchronous steps one after another, then `then`.
     private static func sequence(_ steps: [(@escaping () -> Void) -> Void], then: @escaping () -> Void) {

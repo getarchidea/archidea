@@ -174,16 +174,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ArdiaCoreEngine.shared?.quit()
     }
 
-    /// ⌘M: a browser window minimises with its own Dock tile; any other window (settings) the usual way.
-    @objc func minimize(_ sender: Any?) {
-        guard let key = NSApp.keyWindow else { return }
-        if let controller = ([windowController] + privateWindows).compactMap({ $0 }).first(where: { $0.window === key }) {
-            controller.minimize()
-        } else {
-            key.performMiniaturize(sender)
-        }
-    }
-
     @objc func newTab(_ sender: Any?) { current?.showCommandBar(editing: false) }
     @objc func openLocation(_ sender: Any?) { current?.showCommandBar(editing: true) }
     @objc func closeTab(_ sender: Any?) { current?.closeSelected() }
