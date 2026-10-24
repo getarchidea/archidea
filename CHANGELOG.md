@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- The sidebar slid out over the page stays out while you rename a tab, use its menu or a picker it opened, instead
+  of sliding away mid-edit.
+- Renaming a tab with a long name, or editing a long address, shows the end of it where the caret is.
 - The mini window takes clicks and the keyboard: the page, its links and the toolbar's buttons all work, and it
   keeps focus when it opens from another app instead of handing it to the browser window.
 - A folder dragged onto another space's button lands among that space's pins. Before, it went into Today and the
