@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-24
+
 - **Check for Updates** really checks: it used to answer with the last background check's result, so a release
   that came out after it was missed until a restart. Archidea also checks again when you come back to it or
   wake the Mac, and logs each step to the diagnostic log.
