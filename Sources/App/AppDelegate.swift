@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installDisplayPass()
         Updater.shared.start()
         Downloads.shared.start(profile: engine.defaultProfile)
+        Favicons.shared.profile = engine.defaultProfile
         NSApp.mainMenu = Shortcuts.buildMainMenu(target: self)
         let controller = BrowserWindowController(store: store, profile: engine.defaultProfile)
         windowController = controller

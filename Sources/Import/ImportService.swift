@@ -146,6 +146,12 @@ final class ImportService {
                         read.credentials = result.credentials
                         read.cookies = result.cookies
                         read.warnings += result.warnings.map(\.message)
+                        // Icons for what came over, read last so a problem with them costs nothing else.
+                        do {
+                            read.icons = try importer.favicons(browserId: source.id, profileId: profile.id, pages: read.pageURLs)
+                        } catch {
+                            Trace.log("import: no site icons from \(source.name) (\(error))")
+                        }
                     }
                 }
                 DispatchQueue.main.async {
@@ -177,6 +183,26 @@ final class ImportService {
         var credentials: [Credential] = []
         var cookies: [Cookie] = []
         var warnings: [String] = []
+        var icons: [FaviconReader.Icon] = []
+
+        /// Every page the import brings into the sidebar or bookmarks, for their own icons.
+        var pageURLs: Set<String> {
+            var out = Set<String>()
+            func add(_ node: ImportedNode) {
+                switch node {
+                case let .tab(url, _): out.insert(url)
+                case let .folder(_, _, children, _): children.forEach(add)
+                }
+            }
+            for space in spaces { (space.pinned + space.tabs).forEach(add) }
+            tabs.forEach(add)
+            func mark(_ bookmark: BookmarkNode) {
+                if let url = bookmark.url { out.insert(url) }
+                bookmark.children?.forEach(mark)
+            }
+            bookmarks.map(mark)
+            return out
+        }
     }
 
     private static func space(_ suggestion: SpaceSuggestion) -> ImportedSpace {
@@ -227,7 +253,10 @@ final class ImportService {
                             after()
                         }
                     }
-                }, then: next)
+                }, then: {
+                    controller.history.invalidate()
+                    next()
+                })
             }
         }
         if !read.credentials.isEmpty {
@@ -274,7 +303,47 @@ final class ImportService {
                 }, then: next)
             }
         }
+        if !read.icons.isEmpty {
+            steps.append { next in
+                progress(L("import.progress.icons"))
+                // Eight at a time: the engine writes each to its favicon database.
+                let icons = read.icons
+                let lanes = 8
+                let group = DispatchGroup()
+                for lane in 0..<lanes {
+                    group.enter()
+                    Self.sequence(stride(from: lane, to: icons.count, by: lanes).map { index in
+                        { (after: @escaping () -> Void) in
+                            guard let png = Self.png(icons[index].data) else { return after() }
+                            EngineCall.call("ac_favicons_set", profile: profile,
+                                            args: ["page": icons[index].page, "icon": icons[index].icon, "png": png.base64EncodedString()]) { _ in after() }
+                        }
+                    }, then: { group.leave() })
+                }
+                group.notify(queue: .main) {
+                    Trace.log("import: \(icons.count) site icons stored")
+                    Favicons.shared.forgetMisses()
+                    controller.refreshFavicons()
+                    next()
+                }
+            }
+        }
         Self.sequence(steps) { done(summary) }
+    }
+
+    /// An icon as PNG: Chromium keeps PNG already, Firefox also ICO and SVG.
+    private static func png(_ data: Data) -> Data? {
+        if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return data }
+        guard let image = NSImage(data: data) else { return nil }
+        let side = 32
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        guard let rep else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: NSRect(x: 0, y: 0, width: side, height: side))
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .png, properties: [:])
     }
 
     /// Runs asynchronous steps one after another, then `then`.

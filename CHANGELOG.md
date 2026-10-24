@@ -5,6 +5,10 @@ under *What's new*.
 
 ## [Unreleased]
 
+- New app icons, with a fine grain and soft inner depth, in all ten colours.
+- Imported tabs, bookmarks and history bring their site icons along (from Chrome, Arc, Dia, Edge, Brave, Firefox…),
+  so they show before you open them again; address suggestions from history carry site icons too.
+- Right after an import, the address bar suggests from the imported history straight away.
 - **Downloads**: a button at the bottom of the sidebar fills as files come in; its list shows progress and time
   left, pauses, resumes, cancels, opens files, shows them in Finder and lets you drag them out. ⇧⌘J opens it too.
   A link that only downloads a file no longer leaves an empty tab behind.

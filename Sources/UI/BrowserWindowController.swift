@@ -961,8 +961,19 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     func sidebarFavicon(for item: SidebarItem) -> NSImage? {
         if let image = runtime.liveTab(for: item)?.favicon { return image }
-        return store.favicon(for: item)
+        if let image = store.favicon(for: item) { return image }
+        // Not opened since it came in (an import, a link): the icon the engine has for its page or site.
+        if let image = Favicons.shared.cached(item.url) { return image }
+        Favicons.shared.lookUp(item.url) { [weak self, weak item] image in
+            guard let self, let item else { return }
+            store.setFavicon(image, for: item)
+            sidebar.reloadItem(item)
+        }
+        return nil
     }
+
+    /// New icons arrived for pages (an import stored them): rows ask again.
+    func refreshFavicons() { sidebar.reload() }
 
     func sidebarIsLoaded(_ item: SidebarItem) -> Bool {
         guard let tab = runtime.liveTab(for: item) else { return false }

@@ -7,6 +7,14 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         case search(String)
         case tab(SidebarItem, space: String?)
         case history(url: String, title: String)
+
+        var url: String? {
+            switch self {
+            case let .open(url), let .history(url, _): url
+            case let .tab(item, _): item.url
+            case .search: nil
+            }
+        }
     }
 
     private weak var controller: BrowserWindowController?
@@ -224,8 +232,17 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     }
 
     private func favicon(for suggestion: Suggestion) -> NSImage? {
-        if case let .tab(item, _) = suggestion { return controller?.sidebarFavicon(for: item) }
-        return nil
+        switch suggestion {
+        case let .tab(item, _): return controller?.sidebarFavicon(for: item)
+        case let .history(url, _), let .open(url):
+            if let image = Favicons.shared.cached(url) { return image }
+            Favicons.shared.lookUp(url) { [weak self] image in
+                guard let self, let index = suggestions.firstIndex(where: { $0.url == url }), rows.indices.contains(index) else { return }
+                rows[index].setFavicon(image)
+            }
+            return nil
+        case .search: return nil
+        }
     }
 
     private func select(_ index: Int) {
@@ -339,7 +356,15 @@ private final class SuggestionRow: NSView {
         }
         icon.image = icon.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium)) ?? icon.image
         [icon, title, detail, hint, arrowChip].forEach(addSubview)
+        if let favicon { setFavicon(favicon) }
         highlighted = false
+    }
+
+    /// The site's icon in place of the symbol, once known.
+    func setFavicon(_ image: NSImage) {
+        icon.image = image
+        icon.contentTintColor = nil
+        usesSymbol = false
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -435,3 +460,4 @@ final class KeyCap: NSView {
         text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
     }
 }
+

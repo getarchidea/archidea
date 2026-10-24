@@ -46,6 +46,20 @@ public final class Importer: @unchecked Sendable {
   private func key(_ browserId: String) -> Data? { lock.withLock { keys[browserId] } }
   private func primaryPassword(_ browserId: String) -> String? { lock.withLock { firefoxPasswords[browserId] } }
 
+  /// The site icons the browser keeps, for `pages` and one per site (see FaviconReader); empty where it keeps none
+  /// we can read.
+  public func favicons(browserId: String, profileId: String, pages: Set<String>, cancellation: Cancellation = .init()) throws -> [FaviconReader.Icon] {
+    guard let def = BrowserDefinition.find(browserId) else { return [] }
+    switch def.family {
+    case .chromium, .arc:
+      return try FaviconReader.chromium(profile: try discovery.profileDirectory(def, profileId), pages: pages, cancellation: cancellation)
+    case .firefox:
+      return try FaviconReader.firefox(profile: try discovery.profileDirectory(def, profileId), pages: pages, cancellation: cancellation)
+    case .safari, .automation:
+      return []
+    }
+  }
+
   public func importData(browserId: String, profileId: String, kinds: [ImportKind], options: ImportOptions = .init(),
                          observer: ImportObserver = .silent, cancellation: Cancellation = .init()) throws -> ImportResult {
     guard let def = BrowserDefinition.find(browserId) else { throw ImportError.notFound("Unknown browser \(browserId)") }

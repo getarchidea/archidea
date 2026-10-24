@@ -35,6 +35,9 @@ final class HistoryIndex {
         }
     }
 
+    /// History changed in bulk (an import): the next refresh reads it again whenever it comes.
+    func invalidate() { loadedAt = .distantPast }
+
     /// Best matches for what's typed: a site whose host starts with it first, then words in the address or title,
     /// weighed by how often and how lately it was visited.
     func matches(_ text: String, excluding: Set<String>, limit: Int) -> [Entry] {

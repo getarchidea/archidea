@@ -1,9 +1,37 @@
 <svg width="325" height="325" viewBox="0 0 325 325" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="325" height="325" rx="72" fill="#FAF9F6"/>
-<path d="M162.5 140.756C136.388 120.988 138.396 89.3605 162.5 77.5C186.604 89.3605 188.612 120.988 162.5 140.756C182.586 118.023 213.72 107.151 231.798 118.023C255.901 130.872 249.875 156.57 229.789 172.384C219.746 181.279 204.681 183.256 189.616 181.279C208.698 190.174 216.733 208.953 208.698 222.791C195.642 232.674 181.582 219.826 177.565 206.977C179.573 229.709 172.543 241.57 162.5 247.5C152.457 241.57 145.427 229.709 147.435 206.977C143.418 219.826 129.358 232.674 116.302 222.791C108.267 208.953 116.302 190.174 135.384 181.279C120.319 183.256 105.254 181.279 95.211 172.384C75.1247 156.57 69.0988 130.872 93.2023 118.023C111.28 107.151 142.414 118.023 162.5 140.756Z" fill="url(#paint0_linear_19_30)"/>
+<g filter="url(#filter0_in_19_30)">
+<rect width="325" height="325" rx="72" fill="url(#paint0_linear_19_30)"/>
+<path d="M163 137.419C132.28 114.163 134.643 76.9535 163 63C191.357 76.9535 193.72 114.163 163 137.419C186.631 110.674 223.259 97.8837 244.527 110.674C272.884 125.791 265.794 156.023 242.164 174.628C230.348 185.093 212.625 187.419 194.902 185.093C217.351 195.558 226.803 217.651 217.351 233.93C201.991 245.558 185.449 230.442 180.723 215.326C183.086 242.07 174.815 256.023 163 263C151.185 256.023 142.914 242.07 145.277 215.326C140.551 230.442 124.009 245.558 108.649 233.93C99.1965 217.651 108.649 195.558 131.098 185.093C113.375 187.419 95.6519 185.093 83.8364 174.628C60.2055 156.023 53.1162 125.791 81.4733 110.674C102.741 97.8837 139.369 110.674 163 137.419Z" fill="url(#paint1_linear_19_30)"/>
+</g>
 <defs>
-<linearGradient id="paint0_linear_19_30" x1="94.5" y1="111.5" x2="230.5" y2="213.5" gradientUnits="userSpaceOnUse">
-<stop stop-color="#FFC400"/>
+<filter id="filter0_in_19_30" x="-5" y="-10" width="330" height="335" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dx="-5" dy="-15"/>
+<feGaussianBlur stdDeviation="5"/>
+<feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.15 0"/>
+<feBlend mode="normal" in2="shape" result="effect1_innerShadow_19_30"/>
+<feTurbulence type="fractalNoise" baseFrequency="5 5" stitchTiles="stitch" numOctaves="3" result="noise" seed="1709" />
+<feColorMatrix in="noise" type="luminanceToAlpha" result="alphaNoise" />
+<feComponentTransfer in="alphaNoise" result="coloredNoise1">
+<feFuncA type="discrete" tableValues="0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "/>
+</feComponentTransfer>
+<feComposite operator="in" in2="effect1_innerShadow_19_30" in="coloredNoise1" result="noise1Clipped" />
+<feFlood flood-color="rgba(0, 0, 0, 0.15)" result="color1Flood" />
+<feComposite operator="in" in2="noise1Clipped" in="color1Flood" result="color1" />
+<feMerge result="effect2_noise_19_30">
+<feMergeNode in="effect1_innerShadow_19_30" />
+<feMergeNode in="color1" />
+</feMerge>
+</filter>
+<linearGradient id="paint0_linear_19_30" x1="162.5" y1="0" x2="162.5" y2="325" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FAF9F6"/>
+<stop offset="1" stop-color="#EBE9E0"/>
+</linearGradient>
+<linearGradient id="paint1_linear_19_30" x1="243" y1="223" x2="83" y2="103" gradientUnits="userSpaceOnUse">
+<stop stop-color="#E4AF00"/>
 <stop offset="1" stop-color="#FFDB00"/>
 </linearGradient>
 </defs>
