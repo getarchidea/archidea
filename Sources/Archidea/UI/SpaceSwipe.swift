@@ -31,6 +31,7 @@ final class SpaceSwipe {
         switch event.phase {
         case .began:
             guard sidebar.frame.contains(point) else { return false }
+            Trace.log("swipe: two fingers down on the sidebar")
             offset = 0
             tracking = false
             consumed = false
@@ -40,6 +41,7 @@ final class SpaceSwipe {
             if !tracking {
                 guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.5, abs(event.scrollingDeltaX) > 1 else { return false }
                 tracking = true
+                Trace.log("swipe: sideways, the list follows")
             }
             offset += event.scrollingDeltaX
             velocity = event.scrollingDeltaX
@@ -53,6 +55,7 @@ final class SpaceSwipe {
             let width = sidebar.bounds.width
             let flick = abs(velocity) > 14 && (velocity > 0) == (offset > 0)
             if event.phase == .ended, let next = neighbour(offset), abs(offset) > width * 0.25 || flick {
+                Trace.log("swipe: on to the next space (\(Int(abs(offset))) of \(Int(width)) pt\(flick ? ", flicked" : ""))")
                 let outward: CGFloat = offset > 0 ? width : -width
                 sidebar.settleSwipe(at: outward, duration: 0.16) { [weak self] in
                     guard let self else { return }
@@ -60,6 +63,7 @@ final class SpaceSwipe {
                     arrive(next)
                 }
             } else {
+                Trace.log("swipe: back (\(Int(abs(offset))) of \(Int(width)) pt, \(neighbour(offset) == nil ? "no space that way" : "not far enough"))")
                 sidebar.settleSwipe(at: 0, duration: 0.28)
             }
             offset = 0
