@@ -464,7 +464,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         elsewherePage.isHidden = false
     }
 
-    private func updateWindowTitle() {
+    /// The page's title on the window, so the Dock's window list and Mission Control tell windows apart.
+    func updateWindowTitle() {
         let title = shownTab?.title ?? ""
         window.title = title.isEmpty ? L("app.name") : title
     }
