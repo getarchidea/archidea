@@ -165,6 +165,10 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         }
         makeDefault.isEnabled = !isDefault
 
+        let links = popup([L("settings.links.mini"), L("settings.links.browser")], selected: settings.linksInMiniWindow ? 0 : 1) { [weak self] index in
+            self?.update { $0.linksInMiniWindow = index == 0 }
+        }
+
         let engines = SearchEngine.allCases
         let engine = popup(engines.map(\.name), selected: engines.firstIndex(of: settings.searchEngine) ?? 0) { [weak self] index in
             self?.update { $0.searchEngine = engines[index] }
@@ -174,6 +178,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             SettingsCard(rows: [SettingsRow(title: L("settings.icon"), detail: nil, control: IconChoiceView(tileSize: 36))]),
             SettingsCard(rows: [
                 SettingsRow(title: L("settings.default"), detail: L("settings.default.detail"), control: makeDefault),
+                SettingsRow(title: L("settings.links"), detail: L("settings.links.detail"), control: links),
                 SettingsRow(title: L("settings.search"), detail: nil, control: engine),
             ]),
         ]

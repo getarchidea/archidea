@@ -44,6 +44,14 @@ final class SitePrompts {
         refresh()
     }
 
+    /// Every waiting request answered "not now" (its page is moving to another window).
+    func dismissAll() {
+        let waiting = queue
+        queue.removeAll()
+        waiting.forEach { $0.dismissed() }
+        refresh()
+    }
+
     /// Shows the first request that belongs on screen now; call when the visible tab changes.
     func refresh() {
         queue.removeAll { request in
@@ -292,5 +300,82 @@ private final class PromptButton: NSView {
     override func mouseUp(with event: NSEvent) {
         pressed = false
         if bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+    }
+}
+
+// MARK: - The engine's requests as cards
+
+extension SitePrompts {
+    /// Saving or updating a password the page just used.
+    func addPasswordPrompt(_ prompt: [String: Any], tab: ArdiaCoreTab) {
+        let state = prompt["state"] as? String ?? ""
+        guard state == "save" || state == "update" else { return }
+        let origin = prompt["origin"] as? String ?? ""
+        let update = state == "update"
+        let decline = update ? "nope" : "dismiss"
+        var buttons: [PromptCard.Button] = []
+        if !update {
+            buttons.append(.init(title: L("password.never"), style: .plain) { [weak tab] _ in
+                tab?.resolvePasswordPrompt("never", username: nil, password: nil)
+            })
+        }
+        buttons.append(.init(title: L("password.notNow"), style: .secondary) { [weak tab] _ in
+            tab?.resolvePasswordPrompt(decline, username: nil, password: nil)
+        })
+        buttons.append(.init(title: update ? L("password.update") : L("password.save"), style: .primary) { [weak tab] values in
+            let username = values.first.flatMap { $0.isEmpty ? nil : $0 }
+            tab?.resolvePasswordPrompt(update ? "update" : "save", username: username, password: nil)
+        })
+        add(.init(id: "password-\(tab.tabId)", tab: tab, belongsToTab: true, icon: tab.favicon,
+                  host: URL(string: origin)?.host ?? origin,
+                  title: update ? L("password.update.title") : L("password.save.title"),
+                  fields: [.init(placeholder: L("password.username"), value: prompt["username"] as? String ?? "", secure: false)],
+                  buttons: buttons,
+                  dismissed: { [weak tab] in tab?.resolvePasswordPrompt(decline, username: nil, password: nil) }))
+    }
+
+    /// A site asking for the camera, location, notifications…
+    func addPermissionRequest(_ request: [String: Any], tab: ArdiaCoreTab) {
+        let id = request["id"] as? String ?? ""
+        let origin = request["origin"] as? String ?? ""
+        let kinds = (request["permissions"] as? [String] ?? []).map(Prompts.permissionName).joined(separator: ", ")
+        let resolve = { (result: String, remember: Bool) in
+            ArdiaCoreEngine.shared?.resolvePermission(id, result: result, remember: remember)
+        }
+        add(.init(id: id, tab: tab, belongsToTab: true, icon: tab.favicon, host: URL(string: origin)?.host ?? origin,
+                  title: L("permission.wants", kinds), buttons: [
+                      .init(title: L("permission.deny"), style: .plain) { _ in resolve("deny", true) },
+                      .init(title: L("permission.once"), style: .secondary) { _ in resolve("accept", false) },
+                      .init(title: L("permission.allow"), style: .primary) { _ in resolve("accept", true) },
+                  ], dismissed: { resolve("dismiss", false) }))
+    }
+
+    /// A page wants to open another app (a `zoommtg:` or `slack:` link).
+    func addExternalAppRequest(_ request: [String: Any], tab: ArdiaCoreTab) {
+        let id = request["id"] as? String ?? ""
+        let origin = request["origin"] as? String
+        let host = origin.flatMap { URL(string: $0)?.host } ?? origin ?? tab.committedOrigin ?? ""
+        let resolve = { (open: Bool, remember: Bool) in ArdiaCoreEngine.resolveExternalApp(id, open: open, remember: remember) }
+        guard let app = request["app"] as? String else {
+            // Nothing on this Mac opens the link's kind.
+            let scheme = request["scheme"] as? String ?? ""
+            add(.init(id: "app-\(id)", tab: tab, belongsToTab: true, icon: tab.favicon, host: host,
+                      title: L("externalApp.none", scheme), buttons: [.init(title: "OK", style: .primary) { _ in resolve(false, false) }],
+                      dismissed: { resolve(false, false) }))
+            return
+        }
+        // The app's own icon: from its bundle, else the picture the engine sends along.
+        let icon = (request["appPath"] as? String).map { NSWorkspace.shared.icon(forFile: $0) }
+            ?? (request["icon"] as? String).flatMap { $0.components(separatedBy: ",").last }.flatMap { Data(base64Encoded: $0) }.flatMap(NSImage.init(data:))
+            ?? tab.favicon
+        let name = (app as NSString).deletingPathExtension
+        var buttons: [PromptCard.Button] = [.init(title: L("common.cancel"), style: .plain) { _ in resolve(false, false) }]
+        // "Always" only where the engine can remember it (a page with an origin).
+        if !(request["remember"] is NSNull), request["remember"] != nil {
+            buttons.append(.init(title: L("externalApp.always"), style: .secondary) { _ in resolve(true, true) })
+        }
+        buttons.append(.init(title: L("externalApp.open"), style: .primary) { _ in resolve(true, false) })
+        add(.init(id: "app-\(id)", tab: tab, belongsToTab: true, icon: icon, host: host,
+                  title: L("externalApp.title", name), buttons: buttons, dismissed: { resolve(false, false) }))
     }
 }

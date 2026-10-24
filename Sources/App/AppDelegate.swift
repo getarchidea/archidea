@@ -5,6 +5,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var windowController: BrowserWindowController?
     /// Open private windows; each has its own off-the-record profile.
     private var privateWindows: [BrowserWindowController] = []
+    /// Mini windows holding links from other apps.
+    private var miniWindows: [MiniWindowController] = []
+
+    #if DRIFT_DEV
+    var debugMiniWindows: [MiniWindowController] { miniWindows }
+    #endif
+
+    /// The mini window in front, when it is: page commands (reload, back, ⌘W…) go to its page.
+    private var keyMini: MiniWindowController? { miniWindows.first { $0.window.isKeyWindow } }
 
     /// The browser window commands go to: the key one, else the main window.
     var current: BrowserWindowController? {
@@ -14,6 +23,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The window a tab lives in, for the engine's requests about it.
     func controller(for tab: ArdiaCoreTab) -> BrowserWindowController? {
         privateWindows.first { $0.owns(tab) } ?? windowController
+    }
+
+    /// A permission request for a page in a mini window goes to that window's card; false when it's not one.
+    func miniWindowShowsPermissionRequest(_ request: [String: Any], tab: ArdiaCoreTab) -> Bool {
+        guard let mini = miniWindows.first(where: { $0.tab === tab }) else { return false }
+        mini.showPermissionRequest(request, tab: tab)
+        return true
     }
 
     /// The window holding `profile`'s tabs when the engine opens a new one there (a link, a popup).
@@ -33,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func privateDismiss(_ requestId: String) {
         privateWindows.forEach { $0.dismissPermissionRequest(requestId) }
+        miniWindows.forEach { $0.dismissPermissionRequest(requestId) }
     }
 
     func privateWindowClosed(_ controller: BrowserWindowController) {
@@ -85,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MinimizeDemo.runIfRequested(controller)
         CardsDemo.runIfRequested(controller)
         RenameDemo.runIfRequested(controller)
+        MiniDemo.runIfRequested(self)
         #endif
     }
 
@@ -146,12 +164,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         urls.forEach(IncomingLinks.receive)
     }
 
-    /// A link from another app: a new tab in the browser window, brought forward.
+    /// A link from another app: a mini window of its own, or (as Settings say) a new tab in the browser window.
     private func openIncoming(_ url: URL) {
         guard let controller = windowController else { return }
         if OnboardingWindowController.shared.window?.isVisible == true {
             // Mid-welcome the browser isn't up yet; the link waits in a tab for when it is.
             controller.openInNewTab(url.absoluteString)
+            return
+        }
+        if controller.state.settings.linksInMiniWindow, let engine = ArdiaCoreEngine.shared {
+            let mini = MiniWindowController(url: url.absoluteString, profile: engine.defaultProfile,
+                                            cascadeFrom: miniWindows.last?.window) { [weak self] closed in
+                self?.miniWindows.removeAll { $0 === closed }
+            }
+            miniWindows.append(mini)
+            mini.show()
             return
         }
         controller.showWindow()
@@ -176,22 +203,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ArdiaCoreEngine.shared?.quit()
     }
 
+    /// The page that page commands act on: the mini window's when it's in front, else the browser window's tab.
+    private var activePage: ArdiaCoreTab? { keyMini?.tab ?? current?.activeTab }
+
     @objc func newTab(_ sender: Any?) { current?.showCommandBar(editing: false) }
     @objc func openLocation(_ sender: Any?) { current?.showCommandBar(editing: true) }
-    @objc func closeTab(_ sender: Any?) { current?.closeSelected() }
+    @objc func closeTab(_ sender: Any?) {
+        if let mini = keyMini { return mini.window.performClose(sender) }
+        current?.closeSelected()
+    }
     @objc func togglePin(_ sender: Any?) { current?.togglePinSelected() }
     @objc func newFolder(_ sender: Any?) { current?.newFolder() }
     @objc func toggleSidebar(_ sender: Any?) { current?.toggleSidebar() }
-    @objc func reload(_ sender: Any?) { current?.activeTab?.reload() }
-    @objc func hardReload(_ sender: Any?) { current?.activeTab?.reloadIgnoringCache() }
-    @objc func goBack(_ sender: Any?) { current?.activeTab?.goBack() }
-    @objc func goForward(_ sender: Any?) { current?.activeTab?.goForward() }
+    @objc func reload(_ sender: Any?) { activePage?.reload() }
+    @objc func hardReload(_ sender: Any?) { activePage?.reloadIgnoringCache() }
+    @objc func goBack(_ sender: Any?) { activePage?.goBack() }
+    @objc func goForward(_ sender: Any?) { activePage?.goForward() }
     @objc func find(_ sender: Any?) { current?.showFind() }
-    @objc func copyURL(_ sender: Any?) { current?.copyURL() }
+    @objc func copyURL(_ sender: Any?) {
+        if let mini = keyMini {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(mini.tab.url, forType: .string)
+        } else {
+            current?.copyURL()
+        }
+    }
     @objc func devTools(_ sender: Any?) { current?.toggleDevTools() }
-    @objc func zoomIn(_ sender: Any?) { current?.activeTab?.zoomStep(1) }
-    @objc func zoomOut(_ sender: Any?) { current?.activeTab?.zoomStep(-1) }
-    @objc func zoomReset(_ sender: Any?) { current?.activeTab?.zoomFactor = 1 }
+    @objc func zoomIn(_ sender: Any?) { activePage?.zoomStep(1) }
+    @objc func zoomOut(_ sender: Any?) { activePage?.zoomStep(-1) }
+    @objc func zoomReset(_ sender: Any?) { activePage?.zoomFactor = 1 }
     @objc func nextTab(_ sender: Any?) { current?.selectAdjacent(1) }
     @objc func previousTab(_ sender: Any?) { current?.selectAdjacent(-1) }
     @objc func newSpace(_ sender: Any?) { current?.newSpace() }

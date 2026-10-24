@@ -390,3 +390,9 @@
 "externalApp.none" = "На этом Mac нет приложения для ссылок «%@:»";
 "import.progress.icons" = "Переношу иконки сайтов…";
 "tab.resetName" = "Вернуть название страницы";
+"settings.links" = "Ссылки из других приложений";
+"settings.links.detail" = "Ссылка из чата или письма откроется в отдельном маленьком окне или вкладкой здесь.";
+"settings.links.mini" = "Мини-окно";
+"settings.links.browser" = "Основное окно";
+"mini.open" = "Открыть в Archidea";
+"mini.copyLink" = "Скопировать ссылку";

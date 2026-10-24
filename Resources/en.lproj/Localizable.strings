@@ -390,3 +390,9 @@
 "externalApp.none" = "No app on this Mac opens “%@:” links";
 "import.progress.icons" = "Bringing site icons…";
 "tab.resetName" = "Use the Page’s Title";
+"settings.links" = "Links from other apps";
+"settings.links.detail" = "A link clicked in a chat or a mail opens in a small window of its own, or as a tab here.";
+"settings.links.mini" = "Mini window";
+"settings.links.browser" = "Browser window";
+"mini.open" = "Open in Archidea";
+"mini.copyLink" = "Copy Link";

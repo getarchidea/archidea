@@ -80,6 +80,7 @@ final class EngineHost: NSObject, ArdiaCoreEngineDelegate {
 
     @objc(engine:permissionRequest:tab:)
     func engine(_ engine: ArdiaCoreEngine, permissionRequest request: [String: Any], tab: ArdiaCoreTab) {
+        if app?.miniWindowShowsPermissionRequest(request, tab: tab) == true { return }
         app?.controller(for: tab)?.showPermissionRequest(request, tab: tab)
     }
 

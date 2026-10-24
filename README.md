@@ -114,7 +114,7 @@ Chrome Web Store extensions work, including 1Password, Bitwarden, Proton Pass an
 
 ## 📦 Install
 
-Grab the zip from [Releases](https://github.com/getarchidea/archidea/releases/latest), drop **Archidea** into **Applications**, open it — it'll offer to bring over your tabs, bookmarks and passwords from whatever you're using now.
+Download the **.dmg** from [Releases](https://github.com/getarchidea/archidea/releases/latest), drag **Archidea** into **Applications**, open it — it'll offer to bring over your tabs, bookmarks and passwords from whatever you're using now.
 
 Requires macOS 14 Sonoma or later, on Apple silicon.
 

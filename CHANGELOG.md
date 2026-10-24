@@ -5,6 +5,11 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **Mini window**: a link from another app (a chat, a mail) opens in a small window of its own instead of piling
+  up in your sidebar. *Open in Archidea* moves the page into the browser window as it is — scroll position,
+  sign-in and all; closing the window lets it go. Settings › General › Links from other apps switches back to
+  opening them as tabs.
+
 - Any tab can be renamed (double-click it, or Rename in its menu), and the name stays when the page changes its
   title; “Use the Page’s Title” takes it back.
 
