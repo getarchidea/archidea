@@ -109,6 +109,8 @@ final class PromptCard: NSView {
 
     private let request: SitePrompts.Request
     private let done: () -> Void
+    /// A card is answered once, by whichever comes first: a button, Return, the close mark.
+    private var settled = false
     private var inputs: [NSTextField] = []
     private let material = NSVisualEffectView()
 
@@ -171,14 +173,16 @@ final class PromptCard: NSView {
             input.widthAnchor.constraint(equalToConstant: 300).isActive = true
             input.target = self
             input.action = #selector(submit)
+            // Only Return sends it. Clicking a button, or the card going away, ends the editing too, and sent the
+            // card's main action a second time: a new space was created twice.
+            input.cell?.sendsActionOnEndEditing = false
             inputs.append(input)
             views.append(input)
         }
         let buttons = NSStackView(views: [NSView()] + request.buttons.map { button in
             PromptButton(title: button.title, style: button.style) { [weak self] in
                 guard let self else { return }
-                button.action(inputs.map(\.stringValue))
-                done()
+                settle { button.action(inputs.map(\.stringValue)) }
             }
         })
         buttons.spacing = 8
@@ -234,12 +238,17 @@ final class PromptCard: NSView {
     /// Return in a field presses the card's main button.
     @objc private func submit() {
         guard let main = request.buttons.last(where: { $0.style == .primary }) else { return }
-        main.action(inputs.map(\.stringValue))
-        done()
+        settle { main.action(inputs.map(\.stringValue)) }
     }
 
     @objc private func closeTapped() {
-        request.dismissed()
+        settle { request.dismissed() }
+    }
+
+    private func settle(_ answer: () -> Void) {
+        guard !settled else { return }
+        settled = true
+        answer()
         done()
     }
 }

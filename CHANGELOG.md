@@ -26,6 +26,7 @@ under *What's new*.
 - A folder dragged onto another space's button lands among that space's pins. Before, it went into Today and the
   next launch could archive it with every pin inside; a sidebar saved that way is put right on launch.
 - Deleting a space that holds tabs asks first.
+- Naming a new space created it twice; a card (a name, a question) now takes one answer.
 - ⇧⌘T and the start page's *Recently Closed* survive a restart, and a removed pin comes back to its place (its
   folder, its position) instead of into Today.
 - Today tabs are archived while Archidea runs, not only at the next launch: the tabs a window has in front and
