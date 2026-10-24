@@ -5,26 +5,28 @@ under *What's new*.
 
 ## [Unreleased]
 
-- If the saved sidebar ever can't be read back, Archidea keeps the damaged file and restores the copy from the
-  previous launch instead of starting empty.
-- Closing a private window no longer leaves its event handlers and timers running.
-- An import can no longer hang on a write the engine never answers, or start twice from onboarding.
-- Closing a pinned tab with no open Today tabs moves to another open pin.
-- New app icons, with a fine grain and soft inner depth, in all ten colours.
-- Imported tabs, bookmarks and history bring their site icons along (from Chrome, Arc, Dia, Edge, Brave, Firefox…),
-  so they show before you open them again; address suggestions from history carry site icons too.
-- Right after an import, the address bar suggests from the imported history straight away.
+## [0.1.3] - 2026-10-24
+
 - **Downloads**: a button at the bottom of the sidebar fills as files come in; its list shows progress and time
   left, pauses, resumes, cancels, opens files, shows them in Finder and lets you drag them out. ⇧⌘J opens it too.
   A link that only downloads a file no longer leaves an empty tab behind.
-- The Dock icon's menu opens a new tab, a private window, or any of your spaces.
+- New app icons, with a fine grain and soft inner depth, in all ten colours.
+- Imported tabs, bookmarks and history bring their site icons along (from Chrome, Arc, Dia, Edge, Brave, Firefox…),
+  so they show before you open them again; address suggestions from history carry site icons too.
 - Links from other apps (a sign-in link from a desktop app, a link in Mail) open in Archidea again, also when the link
   is what launches it; before, Archidea only came forward.
 - A site asking to open another app does it on a card with the app's icon — Cancel, Always or Open — instead of
   the engine's dialog.
+- The Dock icon's menu opens a new tab, a private window, or any of your spaces.
 - The new-tab bar casts a proper shadow and dims the page behind it; the sidebar stays clickable while it's open.
+- Right after an import, the address bar suggests from the imported history straight away.
 - Declining the Keychain prompt during import no longer stops the import: everything else comes over, and the
   summary says passwords stayed behind. Other import errors show their actual message.
+- If the saved sidebar ever can't be read back, Archidea keeps the damaged file and restores the copy from the
+  previous launch instead of starting empty.
+- An import can no longer hang on a write the engine never answers, or start twice from onboarding.
+- Closing a private window no longer leaves its event handlers and timers running.
+- Closing a pinned tab with no open Today tabs moves to another open pin.
 
 ## [0.1.2] - 2026-10-24
 
