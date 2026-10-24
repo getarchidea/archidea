@@ -49,6 +49,9 @@ class ChromeButton: NSButton {
 }
 
 final class SidebarOutline: NSOutlineView {
+    /// See `SidebarScroll`: a swipe over the list goes to the window, which pages between spaces.
+    override class var isCompatibleWithResponsiveScrolling: Bool { false }
+
     var onMiddleClick: ((Int) -> Void)?
     /// A drag left the list or ended (dropped or not): the drop indicator goes away.
     var onDragFinished: (() -> Void)?

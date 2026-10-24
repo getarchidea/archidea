@@ -12,7 +12,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     var emptyAreaMenu: (() -> NSMenu)?
 
     let outline = SidebarOutline()
-    let scroll = ThinScrollView()
+    let scroll = SidebarScroll()
 
     private let store: Store
     /// The window's own view of the sidebar: which space it lists, which tab is in front.
@@ -454,6 +454,13 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             menu.addItem(ClosureMenuItem(L("tab.close")) { [weak self] in self?.delegate?.sidebarClose(item) })
         }
     }
+}
+
+/// The list's scroll view. With AppKit's responsive scrolling a trackpad gesture that starts over the list is followed
+/// off the app's event path, so the window's space swipe (`SpaceSwipe`) never saw it: two fingers sideways only switched
+/// spaces over the space bar. The list opts out (`SidebarOutline` too) and its scroll events reach the window.
+final class SidebarScroll: ThinScrollView {
+    override class var isCompatibleWithResponsiveScrolling: Bool { false }
 }
 
 #if DRIFT_DEV
