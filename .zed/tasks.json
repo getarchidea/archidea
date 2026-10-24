@@ -1,9 +1,0 @@
-// Archidea's make commands as Zed tasks (task: spawn). They run in Zed's terminal from the project root.
-[
-  { "label": "Archidea: dev", "command": "make dev", "reveal": "always", "allow_concurrent_runs": false },
-  { "label": "Archidea: watch", "command": "make watch", "reveal": "always", "allow_concurrent_runs": false },
-  { "label": "Archidea: build", "command": "make build" },
-  { "label": "Archidea: release build", "command": "make release-build" },
-  { "label": "Archidea: test", "command": "make test" },
-  { "label": "Archidea: lint", "command": "make lint" }
-]
