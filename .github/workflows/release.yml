@@ -87,7 +87,7 @@ jobs:
       - name: Build
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./build.sh release
+        run: make release-build
 
       - name: Pack
         run: scripts/package.sh "${{ matrix.arch }}"
@@ -162,7 +162,7 @@ jobs:
           for file in release/*.zip release/*.dmg; do
             name="$(basename "$file")"
             # Ed25519 over the whole file (-l), the kind the app checks; the trusted comment ties it to this
-            # version and file (see Minisign.verify in Sources/App/Updater.swift).
+            # version and file (see Minisign.verify in Sources/ArchideaCore/Minisign.swift).
             minisign -S -l -s "$key" -t "archidea v$version $name" -m "$file" </dev/null
           done
           # The public key must verify what the private key signed, or no install could ever update.

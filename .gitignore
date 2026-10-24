@@ -8,6 +8,7 @@
 
 # Maintainers' local tools (not part of the project)
 /Sources/Dev/
+/Sources/Archidea/Dev/
 /scripts/make-icons.swift
 /docs/*
 !/docs/RELEASING.md

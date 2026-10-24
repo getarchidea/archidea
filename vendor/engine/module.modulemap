@@ -1,0 +1,7 @@
+// The engine's Objective-C API as a Swift module (`import ArdiaCore`), linked against the prebuilt framework that
+// scripts/fetch-engine.sh puts next to this file.
+module ArdiaCore [system] {
+    header "ArdiaCore.h"
+    link framework "Chromium Framework"
+    export *
+}

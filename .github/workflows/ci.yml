@@ -26,15 +26,27 @@ jobs:
           path: vendor/engine/Chromium Framework.framework
           key: engine-${{ hashFiles('vendor/engine/ENGINE') }}
 
-      # The model, the import merge, address parsing and update checks, without the engine (Package.swift).
-      - name: Unit tests
-        run: swift test
+      # Incremental builds between runs: SwiftPM picks up where the last one stopped.
+      - name: Cache the Swift build
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.swift', 'Sources/**/*.swift') }}
+          restore-keys: spm-${{ runner.os }}-
 
-      # build.sh also fails when a translation is missing a key.
+      # The bundle step also fails when a translation is missing a key.
       - name: Build
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./build.sh release
+        run: make release-build
+
+      - name: Unit tests
+        run: make test
+
+      # Reports only until the code has had its first `make format`.
+      - name: Formatting
+        continue-on-error: true
+        run: make lint
 
       - name: Check the bundle
         run: |

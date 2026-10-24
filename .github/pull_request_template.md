@@ -2,4 +2,4 @@
 
 ## How I checked it
 
-<!-- `./build.sh` passes; what you tried in the running app; screenshots for anything visual. -->
+<!-- `make build` and `make test` pass; what you tried in the running app; screenshots for anything visual. -->
