@@ -7,6 +7,9 @@ under *What's new*.
 
 - **Cookie banners** go away on their own: Archidea answers them with "reject all" where the site allows it and hides
   the rest. It's on by default; Settings › Privacy and the site controls behind the address switch it off.
+- The sidebar slid out over the page stays out while you rename a tab, use its menu or a picker it opened, instead
+  of sliding away mid-edit.
+- Renaming a tab with a long name, or editing a long address, shows the end of it where the caret is.
 - The mini window takes clicks and the keyboard: the page, its links and the toolbar's buttons all work, and it
   keeps focus when it opens from another app instead of handing it to the browser window.
 - A folder dragged onto another space's button lands among that space's pins. Before, it went into Today and the
