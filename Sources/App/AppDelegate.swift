@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         IconChoice.apply()
         installDisplayPass()
         Updater.shared.start()
+        Downloads.shared.start(profile: engine.defaultProfile)
         NSApp.mainMenu = Shortcuts.buildMainMenu(target: self)
         let controller = BrowserWindowController(store: store, profile: engine.defaultProfile)
         windowController = controller
@@ -76,6 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DragHarness.runIfRequested(controller)
         PrivateDemo.runIfRequested(self)
         SwipeDemo.runIfRequested(controller)
+        CommandBarDemo.runIfRequested(controller)
+        DownloadsDemo.runIfRequested(controller)
         #endif
     }
 
@@ -96,6 +99,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         windowController?.showWindow()
         return true
+    }
+
+    /// The Dock icon's menu: a new tab or private window, and the spaces to jump straight into. macOS adds the open
+    /// windows above and Options / Quit below.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        guard let controller = windowController, OnboardingWindowController.shared.window?.isVisible != true else { return nil }
+        let menu = NSMenu()
+        menu.addItem(withTitle: L("menu.newTab"), action: #selector(dockNewTab(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("menu.newPrivateWindow"), action: #selector(newPrivateWindow(_:)), keyEquivalent: "").target = self
+        let spaces = controller.state.spaces
+        if spaces.count > 1 {
+            menu.addItem(.separator())
+            for space in spaces {
+                let item = menu.addItem(withTitle: space.name, action: #selector(dockOpenSpace(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = space.id
+                item.image = NSImage(systemSymbolName: space.symbol, accessibilityDescription: nil)
+                item.state = space.id == controller.state.currentSpaceID ? .on : .off
+            }
+        }
+        return menu
+    }
+
+    @objc private func dockNewTab(_ sender: Any?) {
+        windowController?.showWindow()
+        NSApp.activate()
+        windowController?.showCommandBar(editing: false)
+    }
+
+    @objc private func dockOpenSpace(_ sender: NSMenuItem) {
+        guard let controller = windowController, let id = sender.representedObject as? UUID,
+              let space = controller.state.spaces.first(where: { $0.id == id }) else { return }
+        controller.showWindow()
+        NSApp.activate()
+        controller.switchSpace(to: space)
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -180,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func reopenClosedTab(_ sender: Any?) { current?.reopenClosedTab() }
     @objc func importData(_ sender: Any?) { ImportWindowController.shared.show() }
     @objc func history(_ sender: Any?) { current?.openInNewTab("chrome://history") }
-    @objc func downloads(_ sender: Any?) { current?.openInNewTab("chrome://downloads") }
+    @objc func downloads(_ sender: Any?) { current?.toggleDownloads() }
 
     @objc func selectTabByNumber(_ sender: NSMenuItem) {
         current?.selectTab(number: sender.tag)

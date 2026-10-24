@@ -10,6 +10,8 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     }
 
     private weak var controller: BrowserWindowController?
+    /// Dims the page behind the centred bar, so the card reads as lifted off it on a dark page too.
+    private let scrim = NSView()
     private let shadowHost = NSView()
     private let card = NSView()
     private let glyph = NSImageView()
@@ -38,11 +40,12 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         super.init(frame: .zero)
         autoresizingMask = [.width, .height]
 
+        scrim.wantsLayer = true
+        addSubview(scrim)
+
         shadowHost.wantsLayer = true
         shadowHost.layer?.shadowColor = NSColor.black.cgColor
-        shadowHost.layer?.shadowOpacity = 0.32
-        shadowHost.layer?.shadowRadius = 28
-        shadowHost.layer?.shadowOffset = CGSize(width: 0, height: -12)
+        shadowHost.layer?.shadowOffset = CGSize(width: 0, height: -16)
         addSubview(shadowHost)
 
         card.wantsLayer = true
@@ -72,8 +75,13 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     required init?(coder: NSCoder) { fatalError() }
 
     override func updateLayer() {
+        // Black on a near-black page barely shows, so dark windows get a deeper shadow and a lighter edge.
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        scrim.layer?.backgroundColor = NSColor.black.withAlphaComponent(dark ? 0.32 : 0.12).cgColor
+        shadowHost.layer?.shadowOpacity = dark ? 0.7 : 0.28
+        shadowHost.layer?.shadowRadius = dark ? 40 : 32
         card.layer?.backgroundColor = Theme.panel.cgColor
-        card.layer?.borderColor = Theme.hairline.cgColor
+        card.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.13) : NSColor.black.withAlphaComponent(0.1)).cgColor
         separator.layer?.backgroundColor = Theme.hairline.cgColor
     }
 
@@ -103,9 +111,11 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         field.currentEditor()?.selectAll(nil)
         if opening {
             shadowHost.alphaValue = 0
+            scrim.alphaValue = 0
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.12
                 shadowHost.animator().alphaValue = 1
+                scrim.animator().alphaValue = 1
             }
         }
     }
@@ -118,6 +128,13 @@ final class CommandBar: NSView, NSTextFieldDelegate {
 
     override func mouseDown(with event: NSEvent) {
         if !shadowHost.frame.contains(convert(event.locationInWindow, from: nil)) { hide() }
+    }
+
+    /// Outside the card the sidebar stays reachable: its presses go straight to it.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        if !shadowHost.frame.contains(local), controller?.sidebarTakesPress(at: convert(local, to: nil)) == true { return nil }
+        return super.hitTest(point)
     }
 
     override func layout() {
@@ -134,6 +151,8 @@ final class CommandBar: NSView, NSTextFieldDelegate {
             let top = bounds.height - max(60, bounds.height * 0.2)
             shadowHost.frame = NSRect(x: (bounds.width - width) / 2, y: top - height, width: width, height: height)
         }
+        // The anchored bar edits the address in place over the sidebar: no dimming there.
+        scrim.frame = anchor == nil ? (controller?.pageFrame(in: self) ?? .zero) : .zero
         let width = shadowHost.frame.width
         shadowHost.layer?.shadowPath = CGPath(roundedRect: shadowHost.bounds, cornerWidth: m.radius, cornerHeight: m.radius, transform: nil)
         card.frame = shadowHost.bounds

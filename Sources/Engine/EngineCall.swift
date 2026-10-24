@@ -61,3 +61,32 @@ enum EngineCall {
         profile.path.withCString { path in call(path, buffer.assumingMemoryBound(to: CChar.self), reply, context) }
     }
 }
+
+/// Events the engine pushes on its own (`downloads.changed`, …): a topic and a JSON payload, on the main thread.
+/// The engine takes one sink; handlers register here by topic.
+enum EngineEvents {
+    private typealias Sink = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> Void
+    private typealias SetSink = @convention(c) (Sink, UnsafeMutableRawPointer?) -> Void
+
+    private static var handlers: [String: [([String: Any]) -> Void]] = [:]
+    private static var installed = false
+
+    static func on(_ topic: String, _ handler: @escaping ([String: Any]) -> Void) {
+        install()
+        handlers[topic, default: []].append(handler)
+    }
+
+    private static func install() {
+        guard !installed, let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "ac_engine_set_event_sink") else { return }
+        installed = true
+        let sink: Sink = { _, topic, json in
+            guard let topic else { return }
+            let name = String(cString: topic)
+            let text = json.map { String(cString: $0) } ?? "{}"
+            let payload = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+            let deliver: () -> Void = { EngineEvents.handlers[name]?.forEach { $0(payload) } }
+            if Thread.isMainThread { deliver() } else { DispatchQueue.main.async(execute: deliver) }
+        }
+        unsafeBitCast(symbol, to: SetSink.self)(sink, nil)
+    }
+}

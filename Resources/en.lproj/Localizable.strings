@@ -251,6 +251,7 @@
 "import.safari.chooseExport" = "Choose Safari Export…";
 "import.progress.reading" = "Reading %@…";
 "import.progress.keychain" = "Waiting for Keychain access to %@…";
+"import.keychainDeclined" = "Passwords and sign-ins stayed in %@ — access to its key wasn't allowed. You can import them later in Settings.";
 "import.progress.bookmarks" = "Saving bookmarks…";
 "import.progress.history" = "Saving history…";
 "import.progress.passwords" = "Saving passwords…";
@@ -359,3 +360,27 @@
 "count.history" = "%d visit|%d visits";
 "count.passwords" = "%d password|%d passwords";
 "count.cookies" = "%d sign-in|%d sign-ins";
+
+"downloads.title" = "Downloads";
+"downloads.empty" = "Nothing downloaded yet";
+"downloads.clear" = "Clear";
+"downloads.folder" = "Open Downloads Folder";
+"downloads.keep" = "Keep";
+"downloads.discard" = "Discard";
+"downloads.pause" = "Pause";
+"downloads.resume" = "Resume";
+"downloads.cancel" = "Cancel";
+"downloads.reveal" = "Show in Finder";
+"downloads.retry" = "Try Again";
+"downloads.open" = "Open";
+"downloads.copyLink" = "Copy Download Link";
+"downloads.remove" = "Remove from List";
+"downloads.dangerous" = "This file may harm your Mac";
+"downloads.ofTotal" = "%@ of %@";
+"downloads.perSecond" = "/s";
+"downloads.left" = "%@ left";
+"downloads.paused" = "Paused";
+"downloads.missing" = "Moved or deleted";
+"downloads.cancelled" = "Cancelled";
+"downloads.failed" = "Couldn't finish";
+"downloads.units" = "bytes,KB,MB,GB,TB";

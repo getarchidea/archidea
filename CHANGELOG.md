@@ -5,6 +5,14 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **Downloads**: a button at the bottom of the sidebar fills as files come in; its list shows progress and time
+  left, pauses, resumes, cancels, opens files, shows them in Finder and lets you drag them out. ⇧⌘J opens it too.
+  A link that only downloads a file no longer leaves an empty tab behind.
+- The Dock icon's menu opens a new tab, a private window, or any of your spaces.
+- The new-tab bar casts a proper shadow and dims the page behind it; the sidebar stays clickable while it's open.
+- Declining the Keychain prompt during import no longer stops the import: everything else comes over, and the
+  summary says passwords stayed behind. Other import errors show their actual message.
+
 ## [0.1.2] - 2026-10-24
 
 - Clicks in the sidebar no longer go dead after switching apps: a click into Archidea while macOS still treats it

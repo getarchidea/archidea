@@ -221,7 +221,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         let status: NSView
         switch imported {
         case let .success(summary)?:
-            let note = summary.lines.isEmpty ? L("import.done.empty") : summary.warnings.prefix(2).joined(separator: " ")
+            let note = summary.lines.isEmpty && summary.warnings.isEmpty ? L("import.done.empty") : summary.warnings.prefix(2).joined(separator: " ")
             status = label(note, size: 12, alpha: 0.5)
         case let .failure(error)?:
             status = label(L("import.failed") + " " + error.localizedDescription, size: 12, alpha: 0.7)

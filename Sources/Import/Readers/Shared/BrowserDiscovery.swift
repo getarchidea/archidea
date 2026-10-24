@@ -251,7 +251,7 @@ public struct BrowserDiscovery {
   }
 
   func attachArcSpaces(_ profiles: inout [BrowserProfile]) {
-    guard let data = try? Data(contentsOf: arcSidebarURL()), let sidebar = try? ArcSidebar.parse(data) else { return }
+    guard let data = try? Data(contentsOf: arcSidebarURL()), let sidebar = try? ArcSpaces.parse(data) else { return }
     for i in profiles.indices {
       let spaces = sidebar.spaces.filter { $0.profileId == profiles[i].id }
       profiles[i].spaces = spaces.map {

@@ -251,6 +251,7 @@
 "import.safari.chooseExport" = "Выбрать экспорт Safari…";
 "import.progress.reading" = "Читаю %@…";
 "import.progress.keychain" = "Жду доступа к ключу %@…";
+"import.keychainDeclined" = "Пароли и входы на сайты остались в %@ — доступ к его ключу не разрешили. Их можно перенести позже в настройках.";
 "import.progress.bookmarks" = "Сохраняю закладки…";
 "import.progress.history" = "Сохраняю историю…";
 "import.progress.passwords" = "Сохраняю пароли…";
@@ -359,3 +360,27 @@
 "count.history" = "%d запись|%d записи|%d записей";
 "count.passwords" = "%d пароль|%d пароля|%d паролей";
 "count.cookies" = "%d вход|%d входа|%d входов";
+
+"downloads.title" = "Загрузки";
+"downloads.empty" = "Пока ничего не скачано";
+"downloads.clear" = "Очистить";
+"downloads.folder" = "Открыть папку «Загрузки»";
+"downloads.keep" = "Оставить";
+"downloads.discard" = "Удалить";
+"downloads.pause" = "Пауза";
+"downloads.resume" = "Продолжить";
+"downloads.cancel" = "Отменить";
+"downloads.reveal" = "Показать в Finder";
+"downloads.retry" = "Скачать снова";
+"downloads.open" = "Открыть";
+"downloads.copyLink" = "Скопировать ссылку";
+"downloads.remove" = "Убрать из списка";
+"downloads.dangerous" = "Файл может навредить Mac";
+"downloads.ofTotal" = "%@ из %@";
+"downloads.perSecond" = "/с";
+"downloads.left" = "осталось %@";
+"downloads.paused" = "На паузе";
+"downloads.missing" = "Перемещён или удалён";
+"downloads.cancelled" = "Отменено";
+"downloads.failed" = "Не удалось скачать";
+"downloads.units" = "байт,КБ,МБ,ГБ,ТБ";

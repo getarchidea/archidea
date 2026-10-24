@@ -75,6 +75,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         configureWindow()
         buildViews()
         installMonitors()
+        observeDownloads()
         applySpace()
         applySidebarMode(animated: false)
         URLInput.engine = state.settings.searchEngine
@@ -198,7 +199,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             Trace.log("press \(event.type == .leftMouseDown ? "left" : "right") key=\(window.isKeyWindow) active=\(NSApp.isActive) "
                 + "on \(WindowDrag.probe(event.locationInWindow, in: window))")
             guard event.type == .leftMouseDown else { return event }
-            if commandBar.isOpen { return event }
+            if commandBar.isOpen {
+                // The bar sits over the whole window; a press in the sidebar closes it and goes on to the sidebar.
+                if sidebarTakesPress(at: event.locationInWindow) { commandBar.hide() }
+                return event
+            }
             if overlayShown, !sidebar.frame.insetBy(dx: -6, dy: 0).contains(root.convert(event.locationInWindow, from: nil)) { setOverlay(false) }
             return WindowDrag.handle(event, in: window) ? nil : event
         }
@@ -236,6 +241,15 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         if animated { root.animateLayout(duration: duration) } else { root.needsLayout = true }
     }
 
+    /// Where the page sits, in `view`'s coordinates.
+    func pageFrame(in view: NSView) -> NSRect { view.convert(content.bounds, from: content) }
+
+    /// Whether a press at this window point lands on the sidebar while it's on screen, docked or slid out.
+    func sidebarTakesPress(at point: NSPoint) -> Bool {
+        guard !contentFullscreen, !state.sidebarHidden || overlayShown else { return false }
+        return sidebar.frame.contains(root.convert(point, from: nil))
+    }
+
     private func setOverlay(_ shown: Bool) {
         overlayHide?.cancel()
         overlayHide = nil
@@ -245,7 +259,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
 
     private func trackPointer(_ event: NSEvent) {
-        guard event.window === window, state.sidebarHidden, !contentFullscreen, !commandBar.isOpen, !root.isResizing else { return }
+        guard event.window === window, state.sidebarHidden, !contentFullscreen, !root.isResizing else { return }
         let point = root.convert(event.locationInWindow, from: nil)
         if !overlayShown {
             if point.x <= 6, point.y > 0, point.y < root.bounds.height { setOverlay(true) }
@@ -444,7 +458,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     /// Closing an open pinned tab unloads it and keeps its place; closing a closed pinned tab, or a Today tab,
     /// takes it out of the list (⇧⌘T brings it back).
-    func close(_ item: SidebarItem) {
+    /// `remembering` puts it on the reopen-closed-tab stack; a tab that only fetched a download isn't worth reopening.
+    func close(_ item: SidebarItem, remembering: Bool = true) {
         if space.isPinned(item), runtime.liveTab(for: item) == nil { return remove(item) }
         let wasActive = item === activeItem
         let neighbor = wasActive ? neighbor(of: item) : nil
@@ -452,7 +467,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         if space.isPinned(item) {
             if let home = item.pinnedURL { item.url = home }
         } else {
-            remember(item)
+            if remembering { remember(item) }
             space.remove(item)
         }
         if wasActive {
@@ -885,6 +900,48 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     func sidebarChanged() { store.setNeedsSave() }
     func sidebarExtensions(from view: NSView) { extensions.showMenu(from: view) }
 
+    // MARK: downloads
+
+    private var downloadsObserver: UUID?
+    private weak var downloadsPopover: NSPopover?
+
+    func sidebarDownloads(from view: NSView) { toggleDownloads() }
+
+    /// ⇧⌘J and the sidebar's button: the downloads list in a popover off the button (or the address, before any
+    /// download has shown the button).
+    func toggleDownloads() {
+        if let open = downloadsPopover, open.isShown { return open.performClose(nil) }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentViewController = DownloadsPanel(isPrivate: isPrivate) { [weak self] url in self?.openInNewTab(url) }
+        if sidebarTakesPress(at: sidebar.convert(NSPoint(x: sidebar.bounds.midX, y: sidebar.bounds.midY), to: nil)) {
+            let anchor: NSView = sidebar.downloadsButton.isHidden ? sidebar.addressAnchor : sidebar.downloadsButton
+            popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: anchor === sidebar.downloadsButton ? .maxY : .maxX)
+        } else {
+            // With the sidebar away the list hangs from the page's top left corner.
+            popover.show(relativeTo: NSRect(x: 24, y: content.bounds.maxY - 8, width: 1, height: 1), of: content, preferredEdge: .minY)
+        }
+        downloadsPopover = popover
+        showDownloadsState()
+    }
+
+    private func observeDownloads() {
+        downloadsObserver = Downloads.shared.observe { [weak self] in self?.showDownloadsState() }
+        showDownloadsState()
+    }
+
+    private func showDownloadsState() {
+        let mine = Downloads.shared.items.filter { $0.offTheRecord == isPrivate }
+        let active = mine.filter(\.active)
+        var progress: Double?
+        if !active.isEmpty {
+            let total = active.reduce(0) { $0 + max(0, $1.total) }
+            progress = active.contains { $0.total <= 0 } || total <= 0 ? -1 : active.reduce(0) { $0 + $1.received } / total
+        }
+        sidebar.showDownloads(visible: !mine.isEmpty, progress: progress, unseen: Downloads.shared.unseen && downloadsPopover?.isShown != true)
+    }
+
     func sidebarResetPin(_ item: SidebarItem) {
         guard let home = item.pinnedURL else { return }
         item.url = home
@@ -939,6 +996,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         if owner === space { sidebar.reload() }
         if foreground { select(item, cause: "chrome-new-tab") } else { tab.view.isHidden = true }
         store.setNeedsSave()
+    }
+
+    func runtime(_ runtime: TabRuntime, downloadTookOver item: SidebarItem) {
+        guard state.space(containing: item) === space, !space.isPinned(item) else { return }
+        close(item, remembering: false)
     }
 
     func runtime(_ runtime: TabRuntime, tabDidClose item: SidebarItem) {
@@ -1141,6 +1203,7 @@ extension BrowserWindowController {
     func debugReloadSidebar() { sidebar.reload() }
     func debugToggle(_ folder: SidebarItem) { sidebar.toggleFolder(folder) }
     var debugSidebar: SidebarView { sidebar }
+    var debugCommandBar: CommandBar { commandBar }
     func debugSwipe(_ event: NSEvent) -> Bool { swipeSpaces(event, at: NSPoint(x: sidebar.frame.midX, y: sidebar.frame.midY)) }
     var debugRoot: NSView { root }
     func debugResize(to x: CGFloat) { root.debugResize(to: x); root.layoutSubtreeIfNeeded() }

@@ -56,12 +56,12 @@ public final class Importer: @unchecked Sendable {
       result.profile = ProfileSuggestion(name: info.name, color: info.color, avatarPath: info.avatarPath)
     }
 
-    var arc: ArcSidebar?
-    func arcSidebar() throws -> ArcSidebar {
+    var arc: ArcSpaces?
+    func arcSidebar() throws -> ArcSpaces {
       if let arc { return arc }
       let url = discovery.arcSidebarURL()
       guard FileManager.default.fileExists(atPath: url.path) else { throw ImportError.notFound("No Arc sidebar data") }
-      let parsed = try ArcSidebar.parse(Data(contentsOf: url))
+      let parsed = try ArcSpaces.parse(Data(contentsOf: url))
       arc = parsed
       return parsed
     }

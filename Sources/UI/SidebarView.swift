@@ -2,6 +2,7 @@ import AppKit
 
 protocol SidebarViewDelegate: AnyObject {
     func sidebarSelect(_ item: SidebarItem, cause: String)
+    func sidebarDownloads(from view: NSView)
     func sidebarClose(_ item: SidebarItem)
     func sidebarRemove(_ item: SidebarItem)
     func sidebarTogglePin(_ item: SidebarItem)
@@ -62,6 +63,8 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
     private let outline = SidebarOutline()
     private let extensionsButton = ChromeButton(symbol: "puzzlepiece.extension", tip: L("sidebar.extensions.tip"))
     private let addSpaceButton = ChromeButton(symbol: "plus", tip: L("sidebar.newSpace.tip"))
+    /// Next to the extensions button once there's something downloaded or downloading.
+    let downloadsButton = DownloadsButton()
     private let spaceStack = NSStackView()
     private let updateBanner = UpdateBanner()
     private var updateVersion: String?
@@ -113,11 +116,13 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
 
         for (button, action) in [(toggleButton, #selector(toggleTapped)), (backButton, #selector(backTapped)),
                                  (forwardButton, #selector(forwardTapped)), (reloadButton, #selector(reloadTapped)),
-                                 (extensionsButton, #selector(extensionsTapped)), (addSpaceButton, #selector(addSpaceTapped))] {
+                                 (extensionsButton, #selector(extensionsTapped)), (addSpaceButton, #selector(addSpaceTapped)),
+                                 (downloadsButton, #selector(downloadsTapped))] {
             button.target = self
             button.action = action
             addSubview(button)
         }
+        downloadsButton.isHidden = true
 
         address.onClick = { [weak self] in self?.delegate?.sidebarAddressClicked() }
         address.onCopy = { [weak self] in
@@ -231,6 +236,7 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
 
         let barY = height - 40
         extensionsButton.frame = NSRect(x: 12, y: barY, width: 28, height: 28)
+        downloadsButton.frame = NSRect(x: 42, y: barY, width: 28, height: 28)
         addSpaceButton.frame = NSRect(x: width - 40, y: barY, width: 28, height: 28)
         layoutSpaces(barY: barY)
     }
@@ -400,14 +406,15 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
     /// Space buttons sit between the extensions and new-space buttons. When their icons don't fit they shrink to
     /// dots, as in Arc; when the dots don't fit either, the strip scrolls sideways and keeps the current one in view.
     private func layoutSpaces(barY: CGFloat) {
-        let room = NSRect(x: 48, y: barY, width: max(0, bounds.width - 96), height: 28)
+        let left: CGFloat = downloadsButton.isHidden ? 48 : 78
+        let room = NSRect(x: left, y: barY, width: max(0, bounds.width - left - 48), height: 28)
         let buttons = spaceStack.arrangedSubviews.compactMap { $0 as? SpaceButton }
         let gaps = CGFloat(max(0, buttons.count - 1)) * spaceStack.spacing
         let compact = CGFloat(buttons.count) * SpaceButton.fullWidth + gaps > room.width
         buttons.forEach { $0.compact = compact }
         let natural = CGFloat(buttons.count) * (compact ? SpaceButton.compactWidth : SpaceButton.fullWidth) + gaps
         let fits = natural <= room.width
-        spaceStrip.frame = fits ? NSRect(x: (bounds.width - natural) / 2, y: barY, width: natural, height: 28) : room
+        spaceStrip.frame = fits ? NSRect(x: max(left, (bounds.width - natural) / 2), y: barY, width: natural, height: 28) : room
         spaceStack.frame = NSRect(x: 0, y: 0, width: natural, height: 28)
         if !fits, let current = buttons.first(where: \.current) {
             spaceStack.layoutSubtreeIfNeeded()
@@ -476,6 +483,16 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
 
     @objc private func addSpaceTapped() { delegate?.sidebarNewSpace() }
     @objc private func extensionsTapped() { delegate?.sidebarExtensions(from: extensionsButton) }
+    @objc private func downloadsTapped() { delegate?.sidebarDownloads(from: downloadsButton) }
+
+    /// The downloads button: shown once there's a download, with a ring while any is running.
+    func showDownloads(visible: Bool, progress: Double?, unseen: Bool) {
+        downloadsButton.progress = progress
+        downloadsButton.unseen = unseen
+        guard downloadsButton.isHidden == visible else { return }
+        downloadsButton.isHidden = !visible
+        needsLayout = true
+    }
     @objc private func toggleTapped() { delegate?.sidebarToggle() }
     @objc private func backTapped() { delegate?.sidebarBack() }
     @objc private func forwardTapped() { delegate?.sidebarForward() }
@@ -856,7 +873,7 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
 private final class CardBackground: NSVisualEffectView, WindowDragSurface {}
 private final class CardTint: NSView, WindowDragSurface {}
 
-final class ChromeButton: NSButton {
+class ChromeButton: NSButton {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     private var hovering = false { didSet { needsDisplay = true } }

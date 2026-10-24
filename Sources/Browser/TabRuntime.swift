@@ -4,6 +4,7 @@ protocol TabRuntimeDelegate: AnyObject {
     func runtime(_ runtime: TabRuntime, didUpdate item: SidebarItem)
     func runtime(_ runtime: TabRuntime, adopt tab: ArdiaCoreTab, opener: ArdiaCoreTab?, foreground: Bool)
     func runtime(_ runtime: TabRuntime, tabDidClose item: SidebarItem)
+    func runtime(_ runtime: TabRuntime, downloadTookOver item: SidebarItem)
     func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, didFindMatches count: Int32, active: Int32)
     func runtime(_ runtime: TabRuntime, tabNeedsActivation tab: ArdiaCoreTab)
     func runtime(_ runtime: TabRuntime, loadingOf tab: ArdiaCoreTab)
@@ -123,6 +124,18 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
 
     @objc(tabDidCommitDocument:) func tabDidCommitDocument(_ tab: ArdiaCoreTab) {
         blocked[ObjectIdentifier(tab)] = nil
+    }
+
+    /// A tab opened only to fetch a file (a link to a download, opened in a new tab) has nothing to show once the
+    /// download takes over: it goes, as in Chrome. A page that started a download stays.
+    @objc(tab:navigationBecameDownload:)
+    func tab(_ tab: ArdiaCoreTab, navigationBecameDownload url: String) {
+        Trace.log("download \(url) from a tab at \(tab.url.isEmpty ? "nothing" : tab.url), back=\(tab.canGoBack)")
+        guard !tab.canGoBack, tab.url.isEmpty || tab.url == "about:blank" || tab.url == url, let item = item(for: tab) else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            delegate?.runtime(self, downloadTookOver: item)
+        }
     }
 
     @objc(tabWillClose:) func tabWillClose(_ tab: ArdiaCoreTab) {

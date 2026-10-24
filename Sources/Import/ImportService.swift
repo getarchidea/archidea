@@ -36,7 +36,7 @@ struct ImportSummary {
     }
 }
 
-/// Reads another browser's data with ImportCore and puts it where it belongs:
+/// Reads another browser's data with the readers in Readers and puts it where it belongs:
 /// spaces, pins and open tabs into Drift's sidebar; bookmarks, history, passwords and cookies into the engine.
 final class ImportService {
     static let shared = ImportService()
@@ -107,9 +107,18 @@ final class ImportService {
                     read.cookies = parts.contains(.cookies) ? export.cookies : []
                     read.warnings = export.warnings.map(\.message)
                 } else {
+                    // Passwords and cookies need the browser's key from the keychain. When the person declines that
+                    // prompt the rest still comes over, and the summary says what stayed behind.
+                    var parts = parts
                     if source.needsKeychain, !parts.filter(\.needsKeychain).isEmpty, !importer.isUnlocked(source.id) {
                         DispatchQueue.main.async { progress(L("import.progress.keychain", source.name)) }
-                        try importer.unlock(browserId: source.id)
+                        do {
+                            try importer.unlock(browserId: source.id)
+                        } catch {
+                            Trace.log("import: \(source.name) key not available (\(error)); skipping passwords and cookies")
+                            parts.subtract(parts.filter(\.needsKeychain))
+                            read.warnings.append(L("import.keychainDeclined", source.name))
+                        }
                     }
                     DispatchQueue.main.async { progress(L("import.progress.reading", source.name)) }
                     var kinds: [ImportKind] = []
@@ -136,7 +145,7 @@ final class ImportService {
                         read.history = result.history
                         read.credentials = result.credentials
                         read.cookies = result.cookies
-                        read.warnings = result.warnings.map(\.message)
+                        read.warnings += result.warnings.map(\.message)
                     }
                 }
                 DispatchQueue.main.async {

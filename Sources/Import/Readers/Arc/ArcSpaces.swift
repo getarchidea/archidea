@@ -1,24 +1,24 @@
 import Foundation
 
-public struct ArcSidebar: Equatable {
+public struct ArcSpaces: Equatable {
   public var spaces: [SpaceSuggestion] = []
   public var favorites: [String: [ImportedTab]] = [:]
 
-  public static func parse(_ data: Data) throws -> ArcSidebar {
+  public static func parse(_ data: Data) throws -> ArcSpaces {
     guard let top = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
           let sidebar = top["sidebar"] as? [String: Any],
           let containers = sidebar["containers"] as? [Any] else {
       throw ImportError.unreadable("StorableSidebar.json is not an Arc sidebar")
     }
     guard let box = containers.compactMap({ $0 as? [String: Any] })
-      .first(where: { $0["spaces"] != nil || $0["items"] != nil }) else { return ArcSidebar() }
+      .first(where: { $0["spaces"] != nil || $0["items"] != nil }) else { return ArcSpaces() }
 
     var items: [String: [String: Any]] = [:]
     for item in objects(box["items"]) {
       if let id = item["id"] as? String { items[id] = item }
     }
 
-    var out = ArcSidebar()
+    var out = ArcSpaces()
     var untitled = 0
     for space in objects(box["spaces"]) {
       guard let id = space["id"] as? String else { continue }
@@ -68,8 +68,8 @@ public struct ArcSidebar: Equatable {
   static let maxThemeNodes = 2_048
 
   final class ThemeBudget {
-    var nodes = ArcSidebar.maxThemeNodes
-    var bytes = ArcSidebar.maxThemeBytes
+    var nodes = ArcSpaces.maxThemeNodes
+    var bytes = ArcSpaces.maxThemeBytes
 
     func spend(nodes: Int = 1, bytes: Int = 0) -> Bool {
       self.nodes -= nodes

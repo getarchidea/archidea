@@ -288,6 +288,10 @@ public enum ImportError: Error, Equatable, CustomStringConvertible {
   }
 }
 
+extension ImportError: LocalizedError {
+  public var errorDescription: String? { description }
+}
+
 public final class Cancellation: @unchecked Sendable {
   private let lock = NSLock()
   private var flag = false
