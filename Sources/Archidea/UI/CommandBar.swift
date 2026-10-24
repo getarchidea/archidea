@@ -129,6 +129,8 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         refresh()
         window?.makeFirstResponder(field)
         field.currentEditor()?.selectAll(nil)
+        // A long address shows its end (the path, the query), all of it still selected to type over.
+        (field.currentEditor() as? NSTextView)?.scrollRangeToVisible(NSRange(location: (field.stringValue as NSString).length, length: 0))
         if opening {
             shadowHost.alphaValue = 0
             scrim.alphaValue = 0

@@ -31,6 +31,14 @@ extension BrowserWindowController {
         applySidebarMode(animated: true)
     }
 
+    /// The slid-out sidebar stays while something of it is in use: a rename, its menu, a popover or sheet it opened
+    /// (an icon picker, the theme editor). The pointer wandering off doesn't put it away then.
+    private var overlayHeld: Bool {
+        // Only popovers among the child windows: the engine keeps child windows of its own (the link status bubble).
+        sidebar.isBusy || window.attachedSheet != nil
+            || (window.childWindows ?? []).contains { $0.isVisible && NSStringFromClass(type(of: $0)).contains("Popover") }
+    }
+
     func trackPointer(_ event: NSEvent) {
         guard event.window === window, state.sidebarHidden, !contentFullscreen, !root.isResizing else { return }
         let point = root.convert(event.locationInWindow, from: nil)
@@ -39,8 +47,13 @@ extension BrowserWindowController {
             return
         }
         if point.x > sidebar.frame.maxX + 24 {
-            guard overlayHide == nil else { return }
-            let work = DispatchWorkItem { [weak self] in self?.setOverlay(false) }
+            guard overlayHide == nil, !overlayHeld else { return }
+            // Checked again when it fires: a rename chosen from the menu starts a moment after the menu closes.
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                overlayHide = nil
+                if !overlayHeld { setOverlay(false) }
+            }
             overlayHide = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
         } else {
