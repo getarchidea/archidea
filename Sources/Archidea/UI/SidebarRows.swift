@@ -208,8 +208,7 @@ final class SidebarCell: NSTableCellView {
 
     func configure(item: SidebarItem, icon image: NSImage?, loaded: Bool, loading: Bool, closable: Bool, tint: NSColor? = nil) {
         if item.isFolder {
-            icon.image = NSImage(systemSymbolName: item.icon ?? (item.expanded ? "folder" : "folder.fill"), accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            icon.image = Self.folderImage(item.icon, open: item.expanded)
             icon.contentTintColor = .secondaryLabelColor
             icon.layer?.cornerRadius = 0
             title.stringValue = item.title
@@ -292,8 +291,13 @@ final class SidebarCell: NSTableCellView {
     }
 
     func setFolderOpen(_ open: Bool, icon custom: String?) {
-        icon.image = NSImage(systemSymbolName: custom ?? (open ? "folder" : "folder.fill"), accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+        icon.image = Self.folderImage(custom, open: open)
+    }
+
+    /// A folder's icon is an outline while it's open and filled while it's closed, whichever icon it has; an emoji
+    /// stays as it is.
+    private static func folderImage(_ custom: String?, open: Bool) -> NSImage? {
+        Glyphs.image(custom ?? "folder", filled: !open, pointSize: 13) ?? Glyphs.image("folder", filled: !open, pointSize: 13)
     }
 
     func beginEditing(_ text: String) -> NSTextField {

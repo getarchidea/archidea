@@ -45,8 +45,7 @@ final class SpaceHeader: SidebarDropView {
     required init?(coder: NSCoder) { fatalError() }
 
     func show(_ space: Space) {
-        icon.image = NSImage(systemSymbolName: "\(space.symbol).fill", accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: space.symbol, accessibilityDescription: nil)
+        icon.image = Glyphs.image(space.symbol, filled: true, pointSize: 13)
         icon.contentTintColor = .labelColor
         name.lineBreakMode = .byTruncatingTail
         name.stringValue = space.name
@@ -115,10 +114,8 @@ final class SpaceButton: SidebarDropView {
         self.space = space
         self.current = current
         super.init(frame: NSRect(x: 0, y: 0, width: 30, height: 28))
-        let symbol = current ? "\(space.symbol).fill" : space.symbol
-        icon.image = (NSImage(systemSymbolName: symbol, accessibilityDescription: space.name)
-            ?? NSImage(systemSymbolName: space.symbol, accessibilityDescription: space.name))?
-            .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+        // The current space's icon is filled, the others' outlines.
+        icon.image = Glyphs.image(space.symbol, filled: current, pointSize: 13)
         // Neutral label colours follow the sidebar's light or dark scheme, so the icon never melts into the tint.
         icon.contentTintColor = current ? .labelColor : .secondaryLabelColor
         icon.imageScaling = .scaleNone

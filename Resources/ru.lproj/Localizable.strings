@@ -408,6 +408,11 @@
 "space.delete.confirm" = "Удалить";
 "update.cantInstall" = "Archidea не может обновиться на этом месте";
 "update.cantInstall.detail" = "Перенесите Archidea в папку «Программы», откройте её оттуда и снова нажмите «Перезапустить».";
+"icons.symbols" = "Символы";
+"icons.emoji" = "Эмодзи";
+"icons.search" = "Поиск символов";
+"icons.anyEmoji" = "Введите или вставьте эмодзи";
+"icons.allEmoji" = "Все эмодзи (⌃⌘Пробел)";
 "settings.cookieBanners" = "Скрывать баннеры о cookie";
 "settings.cookieBanners.detail" = "Отвечает на окна про cookie «отклонить всё», где сайт это позволяет, а остальные прячет. Встроенный autoconsent от DuckDuckGo.";
 "site.cookieBanners" = "Скрывать баннеры о cookie";

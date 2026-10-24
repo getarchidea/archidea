@@ -510,8 +510,7 @@ final class SettingsRow: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     func setIcon(_ symbol: String, color: NSColor) {
-        icon.image = NSImage(systemSymbolName: "\(symbol).fill", accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        icon.image = Glyphs.image(symbol, filled: true, pointSize: 13)
         icon.contentTintColor = color
         icon.isHidden = false
         leadingToEdge.isActive = false

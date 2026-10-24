@@ -149,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let item = menu.addItem(withTitle: space.name, action: #selector(dockOpenSpace(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = space.id
-                item.image = NSImage(systemSymbolName: space.symbol, accessibilityDescription: nil)
+                item.image = Glyphs.image(space.symbol, filled: false, pointSize: 13)
                 item.state = space.id == controller.state.currentSpaceID ? .on : .off
             }
         }

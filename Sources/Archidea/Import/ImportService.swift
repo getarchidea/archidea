@@ -214,7 +214,8 @@ final class ImportService {
             }
         }
         let color = suggestion.color ?? suggestion.colors?.first
-        return ImportedSpace(name: suggestion.name, colorHex: color.flatMap { $0.hasPrefix("#") ? $0 : nil }, symbol: suggestion.icon,
+        // Arc's spaces have an emoji or an icon of Arc's own, which counts only when SF Symbols has the same name.
+        return ImportedSpace(name: suggestion.name, colorHex: color.flatMap { $0.hasPrefix("#") ? $0 : nil }, symbol: suggestion.emoji ?? suggestion.icon,
                              pinned: suggestion.pinned.compactMap(node), tabs: suggestion.tabs.map { .tab(url: $0.url, title: $0.customTitle ?? $0.title) })
     }
 

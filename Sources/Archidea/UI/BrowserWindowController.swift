@@ -604,7 +604,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     /// Imported spaces and open tabs join the sidebar (see `AppState.adopt`).
     func adoptImported(spaces imported: [ImportedSpace], openTabs: [ImportedNode]) -> (spaces: Int, pins: Int, tabs: Int) {
-        let counts = state.adopt(imported: imported, openTabs: openTabs) { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil }
+        let counts = state.adopt(imported: imported, openTabs: openTabs, symbolExists: Glyphs.exists)
         applySpace()
         store.setNeedsSave()
         return counts
@@ -743,7 +743,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         guard state.spaces.count > 1 else { return }
         let count = target.allTabs.count
         guard count > 0 else { return deleteNow(target) }
-        confirm(host: target.name, icon: NSImage(systemSymbolName: target.symbol, accessibilityDescription: nil),
+        confirm(host: target.name, icon: Glyphs.image(target.symbol, filled: true, pointSize: 15),
                 title: L("space.delete.title", target.name), detail: L("space.delete.detail", plural("count.tabs", count)),
                 confirm: L("space.delete.confirm")) { [weak self] in self?.deleteNow(target) }
     }
