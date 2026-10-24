@@ -5,6 +5,10 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **Check for Updates** really checks: it used to answer with the last background check's result, so a release
+  that came out after it was missed until a restart. Archidea also checks again when you come back to it or
+  wake the Mac, and logs each step to the diagnostic log.
+
 - **Start page**: with no tab open, the window shows a search field, the sites you visit most (with their icons)
   and the tabs you closed lately. Start typing anywhere and the address bar opens right over the field with
   your letters in it; right-click a site to take it off. Private windows show no sites.

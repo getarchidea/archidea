@@ -54,12 +54,27 @@ final class Updater {
         state = .failed(failure.message)
     }
 
-    private(set) var state = State.idle { didSet { if state != oldValue { observers.forEach { $0(state) } } } }
+    private(set) var state = State.idle {
+        didSet {
+            guard state != oldValue else { return }
+            observers.forEach { $0(state) }
+            if state != .checking, !answers.isEmpty {
+                let waiting = answers
+                answers.removeAll()
+                waiting.forEach { $0(state) }
+            }
+        }
+    }
     private var observers: [(State) -> Void] = []
     private var timer: Timer?
     private var etag: String?
     private var staged: URL?
-    private let interval: TimeInterval = 5 * 60
+    private let interval: TimeInterval = {
+        #if DRIFT_DEV
+        if let seconds = ProcessInfo.processInfo.environment["DRIFT_UPDATE_INTERVAL"].flatMap(TimeInterval.init) { return seconds }
+        #endif
+        return 5 * 60
+    }()
     private static let autoKey = "AutoUpdate"
 
     let repository = (Bundle.main.object(forInfoDictionaryKey: "ArchideaReleases") as? String).flatMap { $0.contains("/") ? $0 : nil }
@@ -102,6 +117,21 @@ final class Updater {
         guard isEnabled, timer == nil else { return }
         check()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in self?.check() }
+        // The timer stands still while the Mac sleeps, and a check that failed on a bad network waits for the next
+        // round: coming back to the app or waking the Mac checks again once the last check is older than a round.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.checkIfStale()
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.checkIfStale()
+        }
+    }
+
+    private var lastCheck = Date.distantPast
+
+    private func checkIfStale() {
+        guard Date().timeIntervalSince(lastCheck) > interval else { return }
+        check()
     }
 
     // MARK: checking
@@ -112,17 +142,36 @@ final class Updater {
         repository.flatMap { URL(string: "https://github.com/\($0)/releases/latest/download/latest.json") }
     }
 
-    func check() {
+    /// Waiting for the answer to a check the user asked for.
+    private var answers: [(State) -> Void] = []
+
+    /// Checks now, from the user (the menu, Settings), and calls back with what this check found — never with
+    /// what an earlier one did. A download already under way or done is the answer as it is.
+    func checkNow(then answer: @escaping (State) -> Void) {
+        switch state {
+        case .downloading, .ready: return answer(state)
+        case .checking: answers.append(answer)
+        default:
+            answers.append(answer)
+            check(fresh: true)
+        }
+    }
+
+    /// `fresh` skips the ETag: the user asked, so the manifest is read in full whatever came before.
+    func check(fresh: Bool = false) {
         guard isEnabled, let manifestURL else { return }
         switch state {
         case .checking, .downloading, .ready: return
         default: break
         }
         state = .checking
+        lastCheck = Date()
+        Trace.log("updates: checking\(fresh ? " (asked)" : "") for a version after \(currentVersion)")
         var request = URLRequest(url: manifestURL)
         request.setValue("Archidea/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-        if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        if let etag, !fresh { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 30
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async { self?.received(data, response as? HTTPURLResponse, error) }
         }.resume()
@@ -132,13 +181,17 @@ final class Updater {
         guard let response, error == nil else {
             return fail(error.map(Failure.of) ?? .unreachable, "check failed: \(error.map { "\($0)" } ?? "no response")")
         }
-        if response.statusCode == 304 { return state = .upToDate }
+        if response.statusCode == 304 {
+            Trace.log("updates: manifest unchanged")
+            return state = .upToDate
+        }
         guard response.statusCode == 200, let data,
               let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let version = manifest["version"] as? String else {
             return fail(.server, "latest.json answered \(response.statusCode)")
         }
         etag = response.value(forHTTPHeaderField: "ETag")
+        Trace.log("updates: newest release is \(version)")
         guard Self.isNewer(version, than: currentVersion) else { return state = .upToDate }
         let os = ProcessInfo.processInfo.operatingSystemVersion
         if let minimum = manifest["minimumSystemVersion"] as? String,
@@ -171,6 +224,7 @@ final class Updater {
     }
 
     private func download(version: String, from link: URL, sha256: String?, signature: String) {
+        Trace.log("updates: downloading \(version)")
         state = .downloading(version: version)
         URLSession.shared.downloadTask(with: link) { [weak self] file, _, error in
             guard let self else { return }
@@ -179,6 +233,7 @@ final class Updater {
             DispatchQueue.main.async {
                 switch outcome {
                 case let .success(app):
+                    Trace.log("updates: \(version) is ready")
                     self.staged = app
                     self.state = .ready(version: version)
                 case let .failure(problem):

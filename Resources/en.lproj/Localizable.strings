@@ -401,3 +401,5 @@
 "update.error.damaged" = "The downloaded update didn’t pass verification, so it wasn’t installed. Archidea will try again later.";
 "start.closed" = "Recently Closed";
 "start.hide" = "Remove from Start Page";
+"update.downloading" = "Downloading Archidea %@";
+"update.downloading.detail" = "It’s on its way; a Restart button shows in the sidebar once it’s ready.";

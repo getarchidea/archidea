@@ -104,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RenameDemo.runIfRequested(controller)
         MiniDemo.runIfRequested(self)
         StartDemo.runIfRequested(controller)
+        UpdateCheckDemo.runIfRequested(self)
         #endif
     }
 
@@ -258,22 +259,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if case .ready = updater.state { return updater.installNow() }
-        var answered = false
-        updater.observe { [weak self] state in
-            guard !answered else { return }
+        updater.checkNow { [weak self] state in
             switch state {
             case .upToDate:
-                answered = true
                 self?.windowController?.showNotice(L("update.upToDate"), detail: L("update.version", updater.currentVersion))
             case let .failed(reason):
-                answered = true
                 self?.windowController?.showNotice(L("update.failed"), detail: reason)
-            case .downloading, .ready:
-                answered = true
+            case let .downloading(version):
+                self?.windowController?.showNotice(L("update.downloading", version), detail: L("update.downloading.detail"))
+            case .ready:
+                updater.installNow()
             default: break
             }
         }
-        updater.check()
     }
     @objc func reopenClosedTab(_ sender: Any?) { current?.reopenClosedTab() }
     @objc func importData(_ sender: Any?) { ImportWindowController.shared.show() }
