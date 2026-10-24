@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- The mini window takes clicks and the keyboard: the page, its links and the toolbar's buttons all work, and it
+  keeps focus when it opens from another app instead of handing it to the browser window.
+
 ## [0.1.5] - 2026-10-24
 
 - **Check for Updates** really checks: it used to answer with the last background check's result, so a release
