@@ -38,7 +38,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     private var imported: Result<ImportSummary, Error>?
     private var importParts: [ImportPart] = []
     private var importStatus = ""
-    private var preferences = (adBlock: true, defaultBrowser: true, atLogin: false)
+    private var preferences = (adBlock: true, cookieBanners: true, defaultBrowser: true, atLogin: false)
 
     private var browser: BrowserWindowController? { (NSApp.delegate as? AppDelegate)?.windowController }
 
@@ -328,6 +328,12 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             cards.append(ChoiceCard(icon: nil, title: L("onboarding.adBlock.title"), detail: L("onboarding.adBlock.text"), mark: .check,
                                     selected: preferences.adBlock, toggles: true) { [weak self] in self?.preferences.adBlock.toggle() })
         }
+        if BundledExtension.cookieBanners.isAvailable {
+            cards.append(ChoiceCard(icon: nil, title: L("onboarding.cookieBanners.title"), detail: L("onboarding.cookieBanners.text"),
+                                    mark: .check, selected: preferences.cookieBanners, toggles: true) { [weak self] in
+                self?.preferences.cookieBanners.toggle()
+            })
+        }
         cards.append(ChoiceCard(icon: nil, title: L("onboarding.default.title"), detail: L("onboarding.default.text"), mark: .check,
                                 selected: preferences.defaultBrowser, toggles: true) { [weak self] in self?.preferences.defaultBrowser.toggle() })
         cards.append(ChoiceCard(icon: nil, title: L("onboarding.login.title"), detail: L("onboarding.login.text"), mark: .check,
@@ -338,7 +344,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     private func applyPreferences() {
         let adBlock = preferences.adBlock && BundledExtension.adBlocker.isAvailable
-        browser?.updateSettings { $0.adBlock = adBlock }
+        let cookieBanners = preferences.cookieBanners
+        browser?.updateSettings {
+            $0.adBlock = adBlock
+            $0.hideCookieBanners = cookieBanners
+        }
         if preferences.defaultBrowser {
             for scheme in ["http", "https"] {
                 NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpenURLsWithScheme: scheme) { _ in }

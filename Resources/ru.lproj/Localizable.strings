@@ -411,3 +411,5 @@
 "settings.cookieBanners" = "Скрывать баннеры о cookie";
 "settings.cookieBanners.detail" = "Отвечает на окна про cookie «отклонить всё», где сайт это позволяет, а остальные прячет. Встроенный autoconsent от DuckDuckGo.";
 "site.cookieBanners" = "Скрывать баннеры о cookie";
+"onboarding.cookieBanners.title" = "Скрывать баннеры о cookie";
+"onboarding.cookieBanners.text" = "На окна про cookie — «отклонить всё», или они просто прячутся. Выключается в настройках.";

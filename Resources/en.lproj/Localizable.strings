@@ -411,3 +411,5 @@
 "settings.cookieBanners" = "Hide cookie banners";
 "settings.cookieBanners.detail" = "Answers cookie pop-ups with “reject all” where the site offers it, and hides the rest. DuckDuckGo’s autoconsent, built in.";
 "site.cookieBanners" = "Hide Cookie Banners";
+"onboarding.cookieBanners.title" = "Hide cookie banners";
+"onboarding.cookieBanners.text" = "Cookie pop-ups answered with “reject all”, or hidden. Switch it off any time in Settings.";
