@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-24
+
 - Clicks in the sidebar no longer go dead after switching apps: a click into Archidea while macOS still treats it
   as in the background now brings it forward properly.
 - Swipe left or right with two fingers on the sidebar to move between spaces; the list follows your fingers.
