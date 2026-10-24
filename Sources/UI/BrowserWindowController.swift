@@ -1280,7 +1280,6 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
 #if DRIFT_DEV
 extension BrowserWindowController {
-    func debugSetOverlay(_ shown: Bool) { setOverlay(shown) }
     func debugType(_ text: String) { commandBar.debugType(text) }
     func debugHideCommandBar() { commandBar.hide() }
     func debugCommitRename(_ title: String) -> Bool { sidebar.debugCommitRename(title) }
@@ -1288,6 +1287,7 @@ extension BrowserWindowController {
     func debugToggle(_ folder: SidebarItem) { sidebar.toggleFolder(folder) }
     var debugSidebar: SidebarView { sidebar }
     var debugCommandBar: CommandBar { commandBar }
+    func debugSetOverlay(_ shown: Bool) { setOverlay(shown) }
     func debugSwipe(_ event: NSEvent) -> Bool { swipeSpaces(event, at: NSPoint(x: sidebar.frame.midX, y: sidebar.frame.midY)) }
     var debugRoot: NSView { root }
     func debugResize(to x: CGFloat) { root.debugResize(to: x); root.layoutSubtreeIfNeeded() }

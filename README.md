@@ -1,122 +1,182 @@
-<p align="center">
-  <img src=".github/assets/icon.png" width="128" height="128" alt="Archidea">
-</p>
+<div align="center">
+  <img src=".github/assets/icon.png" width="110" alt="Archidea" />
 
-<h1 align="center">Archidea</h1>
+# Archidea
 
-<p align="center">
-  A calm, native browser for the Mac, built around the sidebar.<br>
-  Spaces, pinned tabs and folders — inspired by Arc, without the weight.
-</p>
+**A calm, fast browser for the Mac, built around the sidebar.**
 
-<p align="center">
-  <a href="https://github.com/getarchidea/archidea/releases/latest"><b>Download for macOS</b></a>
-  &nbsp;·&nbsp;
-  <a href="#features">Features</a>
-  &nbsp;·&nbsp;
-  <a href="#coming-from-arc">Coming from Arc</a>
-  &nbsp;·&nbsp;
-  <a href="#faq">FAQ</a>
-</p>
+Spaces, pinned tabs and folders — the ideas that made Arc feel like home,<br>
+in a native Mac app that stays light.
 
-<p align="center">
-  <img src=".github/assets/browser.png" alt="Archidea with its sidebar: spaces, pinned tabs, folders and today's tabs" width="860">
-</p>
+<a href="https://github.com/getarchidea/archidea/releases/latest"><b>Download for macOS</b></a>
+&nbsp;·&nbsp;
+<a href="#-the-browser-is-the-sidebar">Features</a>
+&nbsp;·&nbsp;
+<a href="#-coming-from-arc">Coming from Arc</a>
+&nbsp;·&nbsp;
+<a href="#-faq">FAQ</a>
 
-## Why Archidea
+<img src="https://img.shields.io/github/v/release/getarchidea/archidea?style=flat-square&color=7C8CF8&label=release" alt="latest release">
+<img src="https://img.shields.io/badge/macOS%2014%2B%20%C2%B7%20Apple%20silicon-F28C6B?style=flat-square" alt="macOS 14+ · Apple silicon">
+<img src="https://img.shields.io/badge/no%20telemetry%20%C2%B7%20no%20accounts-5EC48B?style=flat-square" alt="no telemetry · no accounts">
+<img src="https://img.shields.io/badge/license-GPL--3.0-8A8F98?style=flat-square" alt="GPL-3.0">
 
-Arc showed that a browser can be organised like a workspace instead of a row of tabs. Arc is winding down, and
-the browsers that follow it grow heavier every release. Archidea keeps the part that mattered — the sidebar — and
-builds it the way Mac apps should be built: in Swift and AppKit, on top of Chromium, with nothing in between.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/hero-dark.png">
+  <img src=".github/assets/hero-light.png" width="880" alt="Archidea: a light window with an indigo sidebar of spaces, pinned tabs and folders, a Wikipedia article open">
+</picture>
 
-- **Native, not a web app.** The window, sidebar, menus and animations are AppKit. Pages render with Chromium, so
-  every site and every Chrome extension works.
-- **Light.** Background tabs give their memory back after a while; stale tabs tidy themselves away.
-- **Private by default.** No account, no telemetry, no AI sending your pages anywhere. An ad and tracker blocker
-  is built in, one switch away.
+<sub>The same window in a dark space: the page, the tint, the mood — all of it switches.</sub>
+</div>
 
-## Features
+---
 
-**Sidebar and spaces**
-- Spaces with their own colour, icon and light or dark look — swipe between them with two fingers.
-- Pinned tabs that stay put, folders that nest, Today tabs that archive themselves after 12 hours (or never).
-- Drag anything anywhere: between pins and Today, into folders, onto another space.
-- Hide the sidebar and it slides back in from the edge, Arc-style.
+Arc showed that a browser can be organised like a workspace instead of a row of tabs. Arc is winding down, and the browsers that follow it grow heavier with every release. Archidea keeps the part that mattered — the sidebar — and builds it the way Mac apps should be built: **Swift and AppKit on top of Chromium, with nothing in between.**
 
-**Browsing**
-- ⌘T opens a command bar for addresses, searches, open tabs and your history.
-- Site controls in the address bar: permissions, zoom, extensions, clearing a site's data, its certificate.
-- Private windows (⇧⌘N) that keep nothing: no history, no cookies, no sidebar left behind.
-- Find on page, DevTools, picture-in-picture, downloads — Chromium's, untouched.
-- Requests from sites — location, camera, saving a password — appear as quiet cards next to the page, not as
-  alerts that block the window.
+- **Native, not a web app.** The window, the sidebar, the menus, the animations — all AppKit. Pages render with Chromium, so every site and every Chrome extension just works.
+- **Light.** Tabs you haven't touched in a while quietly give their memory back; stale Today tabs tidy themselves away. Fifty pins don't mean fifty processes.
+- **Private by default.** No account, no telemetry, no AI reading your pages. A built-in ad and tracker blocker is one switch away.
 
-**Your data, your way**
-- Import from Arc (spaces and pins included), Dia, Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera and Helium:
-  bookmarks, history, passwords and sign-ins.
-- Chrome Web Store extensions, including 1Password, Bitwarden, Proton Pass and KeePassXC.
-- Built-in ad and tracker blocking (uBlock Origin) — one switch in the welcome window or in Settings.
-- English and Russian, following your Mac's language or your choice.
+## 🗂 The browser is the sidebar
 
-**Stays up to date**
-- New versions download in the background and install when you quit — or right away from the sidebar.
+<table>
+<tr>
+<td width="260" valign="top">
+<img src=".github/assets/sidebar.png" width="240" alt="Sidebar: Personal space with pinned tabs Kurlo, Plugboard, GitHub, Hacker News, a Reading folder, and Today tabs">
+</td>
+<td valign="top">
 
-## Install
+**Spaces** with their own colour, icon and light or dark look — swipe between them with two fingers.
 
-1. Download the latest `Archidea-<version>.zip` from [Releases](https://github.com/getarchidea/archidea/releases/latest).
-2. Unzip it and move **Archidea** to your Applications folder.
-3. Open it. The welcome window brings your browser over and sets up the look you like.
+**Pinned tabs** that stay put, **folders** that nest, **Today tabs** that archive themselves after 12 hours — or never, your call.
 
-Requires macOS 14 Sonoma or later on Apple silicon.
+Drag anything anywhere: between pins and Today, into folders, onto another space.
 
-## Coming from Arc
+</td>
+</tr>
+</table>
 
-The welcome window finds Arc on your Mac and brings over your spaces with their pinned tabs and folders, plus
-bookmarks, history, passwords and sign-ins. You can run it again any time from **File › Import from Another
-Browser…**.
+Every space is a mood of its own — the colour, the tint strength, light or dark. Pages follow: a dark space asks sites for their dark look.
 
-A few things to know:
-- Close Arc before importing sign-ins — Archidea offers to do it for you — so your sessions come over fresh.
-- Google and YouTube ask you to sign in once more: Google ends a session when its cookies move to another
-  browser. Other sites stay signed in.
-- Apple Passwords can't be used through its browser extension in Archidea (macOS only lets Apple's helper run
-  under browsers Apple approves). Export your passwords from the Passwords app (**File › Export All Passwords**)
-  and import the file in **File › Import from Another Browser…**.
+<div align="center">
+  <img src=".github/assets/theme-editor.png" width="720" alt="Theme editor: a grid of colour swatches, a tint strength slider and Light / Dark / Auto"><br>
+  <sub>Every space gets its own colour, tint strength and light or dark look.</sub>
+</div>
 
-## Keyboard
+When you need the whole screen, the sidebar slides away — and slides back over the page the moment your pointer touches the left edge, the way Arc did it.
 
-| | |
-|---|---|
-| New tab | ⌘T |
-| Edit the address | ⌘L |
-| Show or hide the sidebar | ⌘S |
-| Pin or unpin a tab | ⌘D |
-| Next / previous space | ⌥⌘→ / ⌥⌘← |
-| Reopen a closed tab | ⇧⌘T |
-| New private window | ⇧⌘N |
-| New space | ⌃⌘N |
-| Find on page | ⌘F |
-| Settings | ⌘, |
+<div align="center">
+  <img src=".github/assets/overlay.png" width="720" alt="The sidebar floating as a card over a full-width GitHub page"><br>
+  <sub>Hidden, but never more than a nudge away.</sub>
+</div>
 
-## FAQ
+## ⌨️ ⌘T does everything
 
-**Is it free?** Yes, and open source under the GPL-3.0.
+A command bar for addresses, searches, your open tabs and your history — one keystroke, type a few letters, Return.
 
-**Does it send anything anywhere?** No telemetry and no accounts. It checks GitHub for new releases, and the
-sites you visit see what any Chromium browser sends them.
+<div align="center">
+  <img src=".github/assets/commandbar.png" width="720" alt="The command bar: a capsule in the middle of the window over a dimmed page"><br>
+  <sub>Addresses, searches, open tabs and history — one bar, one keystroke.</sub>
+</div>
 
-**Where is my data?** In `~/Library/Application Support/Archidea` on your Mac.
+Site requests — location, camera, saving a password, opening an app — arrive as quiet cards in the corner of the page instead of dialogs that block the window. Site controls sit behind the address bar: permissions, zoom, extensions, clearing a site's data, its certificate.
 
-**Windows or Linux?** Not yet. Archidea is a Mac app first.
+## 🕶 Private windows
 
-**Is this Arc?** No. Archidea is an independent project, not affiliated with The Browser Company.
+A private window keeps nothing: no history, no cookies, no sidebar left behind when it closes. Its dark look makes it easy to tell apart at a glance.
 
-## Contributing
+<div align="center">
+  <img src=".github/assets/private.png" width="640" alt="A dark private window showing an incognito page"><br>
+  <sub>Opens with ⇧⌘N. When it closes, it never happened.</sub>
+</div>
 
-Bug reports and ideas are welcome in [Issues](https://github.com/getarchidea/archidea/issues). To build Archidea
-yourself or send a change, see [CONTRIBUTING.md](CONTRIBUTING.md); maintainers cut releases as described in [docs/RELEASING.md](docs/RELEASING.md).
+## 🧳 Bring everything over
 
-## License
+The welcome window finds your old browser — **Arc (spaces and pins included), Dia, Chrome, Safari, Firefox, Edge, Brave, Vivaldi, Opera and Helium** — and brings over bookmarks, history, passwords and sign-ins.
 
-Archidea is free software under the [GNU General Public License v3.0](LICENSE). It builds on Chromium and other
-open-source work; see [NOTICE](NOTICE.md).
+<div align="center">
+  <img src=".github/assets/welcome.png" width="640" alt="The welcome window: import from another browser, pick a look, a few preferences"><br>
+  <sub>First launch. Run it again any time from <b>File › Import from Another Browser…</b></sub>
+</div>
+
+Chrome Web Store extensions work, including 1Password, Bitwarden, Proton Pass and KeePassXC. The built-in blocker (uBlock Origin) is one switch in the welcome window or in Settings.
+
+## ⌨️ Keyboard
+
+| | | | |
+|---|---|---|---|
+| New tab | <kbd>⌘</kbd><kbd>T</kbd> | Edit the address | <kbd>⌘</kbd><kbd>L</kbd> |
+| Close tab | <kbd>⌘</kbd><kbd>W</kbd> | Reopen closed tab | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>T</kbd> |
+| Pin or unpin | <kbd>⌘</kbd><kbd>D</kbd> | Show / hide the sidebar | <kbd>⌘</kbd><kbd>S</kbd> |
+| Next / previous space | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>→</kbd> / <kbd>←</kbd> | New private window | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd> |
+| New space | <kbd>⌃</kbd><kbd>⌘</kbd><kbd>N</kbd> | Find on page | <kbd>⌘</kbd><kbd>F</kbd> |
+| Settings | <kbd>⌘</kbd><kbd>,</kbd> | | |
+
+## 📦 Install
+
+Grab the zip from [Releases](https://github.com/getarchidea/archidea/releases/latest), drop **Archidea** into **Applications**, open it — it'll offer to bring over your tabs, bookmarks and passwords from whatever you're using now.
+
+Requires macOS 14 Sonoma or later, on Apple silicon.
+
+## 🌅 Coming from Arc
+
+The welcome window finds Arc on your Mac and brings over your spaces with their pinned tabs and folders, plus bookmarks, history, passwords and sign-ins. A few things to know:
+
+- Close Arc before importing sign-ins — Archidea offers to do it for you — so sessions come over fresh.
+- Google and YouTube ask you to sign in once more: Google ends a session when its cookies move to another browser. Other sites stay signed in.
+- Apple Passwords can't reach through its browser extension here (macOS only lets Apple's helper run under browsers Apple approves). Export from the Passwords app (**File › Export All Passwords**) and import the file instead.
+
+## ❓ FAQ
+
+<details open>
+<summary><b>Is it free?</b></summary>
+
+Yes — free and open source under the GPL-3.0.
+</details>
+
+<details>
+<summary><b>Does it send anything anywhere?</b></summary>
+
+No telemetry and no accounts. It checks GitHub for new releases; otherwise the sites you visit see what any Chromium browser sends them.
+</details>
+
+<details>
+<summary><b>Where is my data?</b></summary>
+
+In `~/Library/Application Support/Archidea`, on your Mac. Nowhere else.
+</details>
+
+<details>
+<summary><b>Windows or Linux?</b></summary>
+
+Not yet — Archidea is a Mac app first.
+</details>
+
+<details>
+<summary><b>Is this Arc?</b></summary>
+
+No. Archidea is an independent project and isn't affiliated with The Browser Company. We just loved the same idea.
+</details>
+
+<details>
+<summary><b>How does it stay up to date?</b></summary>
+
+New versions download in the background, are verified with a release signature, and install when you quit — or right away from the sidebar. Debug builds never update themselves.
+</details>
+
+## ⭐ Star history
+
+<div align="center">
+<a href="https://www.star-history.com/#getarchidea/archidea&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=getarchidea/archidea&type=Date&theme=dark">
+    <img src="https://api.star-history.com/svg?repos=getarchidea/archidea&type=Date" width="640" alt="Star history chart">
+  </picture>
+</a>
+</div>
+
+---
+
+Bug reports and ideas are welcome in [Issues](https://github.com/getarchidea/archidea/issues). To build Archidea yourself or send a change, see [CONTRIBUTING.md](CONTRIBUTING.md); security reports are described in [SECURITY.md](SECURITY.md).
+
+Archidea is free software under the [GNU General Public License v3.0](LICENSE). It builds on Chromium and other open-source work; see [NOTICE](NOTICE.md).

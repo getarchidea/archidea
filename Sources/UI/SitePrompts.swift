@@ -64,11 +64,10 @@ final class SitePrompts {
         }
         guard let next, let host else { return }
         let card = PromptCard(request: next) { [weak self] in self?.finish(id: next.id) }
-        let size = card.fittingSize
-        card.frame = NSRect(x: 12, y: host.bounds.height - size.height - 12, width: size.width, height: size.height)
-        card.autoresizingMask = [.maxXMargin, .minYMargin]
+        card.frame.size = card.fittingSize
         card.alphaValue = 0
         host.addSubview(card)
+        card.place()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
             card.animator().alphaValue = 1
@@ -203,6 +202,13 @@ final class PromptCard: NSView {
 
     override func updateLayer() {
         material.layer?.borderColor = Theme.hairline.cgColor
+    }
+
+    /// In the page's top left corner, clear of the sidebar when it's slid out over the page.
+    func place() {
+        guard let host = superview else { return }
+        let clearance = (host as? ContentView)?.sidebarClearance ?? 0
+        frame.origin = NSPoint(x: 12 + clearance, y: host.bounds.height - frame.height - 12)
     }
 
     override func layout() {

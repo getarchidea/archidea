@@ -128,6 +128,8 @@ final class RootView: NSView, WindowDragSurface {
         pageShadow.frame = page
         pageShadow.isHidden = contentFullscreen
         let side = contentFullscreen ? sidebarFrame.offsetBy(dx: -CGFloat(sidebarWidth) - 40, dy: 0) : sidebarFrame
+        // The slid-out sidebar lies over the page: the page's corner cards keep clear of it, moving with it.
+        content?.sidebarClearance = mode == .overlay && !contentFullscreen ? max(0, side.maxX - page.minX) : 0
         sidebar?.frame = side
         sidebar?.floating = mode != .docked
         handle.frame = NSRect(x: side.maxX - 6, y: side.minY, width: 12, height: side.height)
@@ -186,6 +188,10 @@ private final class TintView: NSView, WindowDragSurface {}
 final class ContentView: NSView {
     weak var emptyState: NSView?
     var onLayout: (() -> Void)?
+    /// How much of the page's left edge the slid-out sidebar covers.
+    var sidebarClearance: CGFloat = 0 {
+        didSet { if sidebarClearance != oldValue { needsLayout = true } }
+    }
 
     var cornerRadius: CGFloat = 10 {
         didSet { layer?.cornerRadius = cornerRadius }
@@ -213,6 +219,7 @@ final class ContentView: NSView {
         super.layout()
         emptyState?.frame = bounds
         for case let bar as FindBar in subviews { bar.place() }
+        for case let card as PromptCard in subviews { card.place() }
         onLayout?()
     }
 }

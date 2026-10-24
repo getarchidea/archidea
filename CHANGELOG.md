@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Site and app cards in the page's corner move aside when the hidden sidebar slides out, instead of ending up
+  underneath it.
+
 ## [0.1.3] - 2026-10-24
 
 - **Downloads**: a button at the bottom of the sidebar fills as files come in; its list shows progress and time
