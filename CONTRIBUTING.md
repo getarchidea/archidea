@@ -30,7 +30,7 @@ Code's Swift extensions) reads `Package.swift` for completion and navigation.
 ```bash
 git clone https://github.com/getarchidea/archidea.git
 cd archidea
-make setup     # checks the toolchain, fetches the engine and uBlock Origin, installs watchexec (Brewfile)
+make setup     # checks the toolchain, fetches the engine and the bundled extensions, installs watchexec (Brewfile)
 make dev       # builds and runs Archidea in the terminal with a profile of its own; ⌃C quits
 ```
 
@@ -52,7 +52,7 @@ app bundles). There is no hot reload of running code: a native app around Chromi
 reliably, so `make watch` restarts instead, and the separate profile brings back the same tabs.
 
 The first build downloads the prebuilt Chromium engine (about 95 MB) pinned in `vendor/engine/ENGINE` and checks
-its SHA-256, and fetches uBlock Origin for the built-in blocker. If you have an Apple Development or Developer ID
+its SHA-256, and fetches uBlock Origin for the built-in blocker and DuckDuckGo's autoconsent for cookie banners. If you have an Apple Development or Developer ID
 certificate, the build signs with it so macOS remembers camera and microphone permissions between builds;
 otherwise it signs ad hoc. `DRIFT_SIGN_IDENTITY` picks a certificate explicitly.
 

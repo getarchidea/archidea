@@ -235,8 +235,10 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     private func privacy() -> [NSView] {
         let blocker = ClosureSwitch(on: settings.adBlock) { [weak self] on in self?.update { $0.adBlock = on } }
+        let cookies = ClosureSwitch(on: settings.hideCookieBanners) { [weak self] on in self?.update { $0.hideCookieBanners = on } }
         var rows = [
             SettingsRow(title: L("settings.adBlock"), detail: L("settings.adBlock.detail"), control: blocker),
+            SettingsRow(title: L("settings.cookieBanners"), detail: L("settings.cookieBanners.detail"), control: cookies),
             SettingsRow(title: L("settings.passwords"), detail: L("settings.passwords.detail"),
                         control: button(L("settings.open")) { [weak self] in self?.openPage("chrome://password-manager/passwords") }),
             SettingsRow(title: L("settings.import"), detail: L("settings.import.detail"),

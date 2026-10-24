@@ -14,6 +14,7 @@
     "**/.build",
     "build",
     "vendor/engine/Chromium Framework.framework",
-    "vendor/ublock"
+    "vendor/ublock",
+    "vendor/autoconsent"
   ]
 }

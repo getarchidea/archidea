@@ -5,6 +5,7 @@
 /vendor/engine/Chromium Framework.framework/
 /vendor/engine/.fetch-*
 /vendor/ublock/
+/vendor/autoconsent/
 
 # Maintainers' local tools (not part of the project)
 /Sources/Dev/

@@ -300,12 +300,15 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
 
     /// The address bar's search and full-URL switches are app-wide, so every window sets them from the same settings;
-    /// the blocker is loaded into the normal profile only.
+    /// the bundled extensions load into the normal profile, and private windows get them from there.
     private func applySettings() {
         URLInput.engine = settings.searchEngine
         AddressPill.showsFullURL = settings.showFullURL
         runtime.unloadMinutes = settings.unloadMinutes
-        if !isPrivate { AdBlocker.apply(settings.adBlock, to: profile) }
+        if !isPrivate {
+            BundledExtension.adBlocker.apply(settings.adBlock, to: profile)
+            BundledExtension.cookieBanners.apply(settings.hideCookieBanners, to: profile)
+        }
     }
 
     func showWindow() {

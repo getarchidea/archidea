@@ -191,6 +191,8 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(state.currentSpace.pinned.first?.customTitle)
         XCTAssertTrue(state.recentlyClosed.isEmpty)
         XCTAssertEqual(state.version, AppState.schemaVersion)
+        // Settings saved before cookie banners were hidden take the default: on.
+        XCTAssertTrue(state.settings.hideCookieBanners)
     }
 
     func testFieldsFromANewerVersionAreSkipped() throws {

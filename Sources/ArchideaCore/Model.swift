@@ -384,6 +384,8 @@ public struct BrowserSettings: Codable, Equatable {
     public var showFullURL = false
     /// The built-in ad and tracker blocker (uBlock Origin).
     public var adBlock = false
+    /// Cookie banners answered with "reject all", or hidden where that isn't possible (autoconsent).
+    public var hideCookieBanners = true
     /// Where links from other apps open: a mini window of their own, or a tab in the browser window.
     public var linksInMiniWindow = true
     /// Sites taken off the start page.
@@ -400,6 +402,7 @@ public struct BrowserSettings: Codable, Equatable {
         clearKeepsMinutes = (try? c.decodeIfPresent(Int.self, forKey: .clearKeepsMinutes)) ?? defaults.clearKeepsMinutes
         showFullURL = (try? c.decodeIfPresent(Bool.self, forKey: .showFullURL)) ?? defaults.showFullURL
         adBlock = (try? c.decodeIfPresent(Bool.self, forKey: .adBlock)) ?? defaults.adBlock
+        hideCookieBanners = (try? c.decodeIfPresent(Bool.self, forKey: .hideCookieBanners)) ?? defaults.hideCookieBanners
         linksInMiniWindow = (try? c.decodeIfPresent(Bool.self, forKey: .linksInMiniWindow)) ?? defaults.linksInMiniWindow
         hiddenTopSites = (try? c.decodeIfPresent([String].self, forKey: .hiddenTopSites)) ?? defaults.hiddenTopSites
     }

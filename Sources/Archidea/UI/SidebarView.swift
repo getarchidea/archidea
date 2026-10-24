@@ -335,6 +335,10 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
 
     private var pendingReveal: SidebarItem?
 
+    /// In the middle of something (a rename, its menu): slid out over the page, the sidebar stays out until it's done.
+    var isBusy: Bool { renaming != nil || menuOpen }
+    private var menuOpen = false
+
     func updateAddress(_ tab: ArdiaCoreTab?) {
         address.show(url: tab?.url)
         backButton.isEnabled = tab?.canGoBack ?? false
@@ -361,6 +365,8 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
             editor.insertionPointColor = .labelColor
             let length = label.stringValue.utf16.count
             editor.selectedRange = selectAll ? NSRange(location: 0, length: length) : NSRange(location: length, length: 0)
+            // A long name shows its end, where the caret is, not its start.
+            editor.scrollRangeToVisible(NSRange(location: length, length: 0))
         }
     }
 
@@ -796,6 +802,9 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
     }
 
     // MARK: context menu
+
+    func menuWillOpen(_ menu: NSMenu) { menuOpen = true }
+    func menuDidClose(_ menu: NSMenu) { menuOpen = false }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
