@@ -90,7 +90,7 @@ extension BrowserWindowController {
     func window(_ window: ArdiaCoreWindow, didInsert tab: ArdiaCoreTab, opener: ArdiaCoreTab?, disposition: String) {
         guard !runtime.isMine(tab) else { return }
         Trace.log("chrome opened a tab: \(disposition), from \(opener.flatMap { runtime.item(for: $0)?.traceName } ?? "no tab")")
-        runtime(runtime, adopt: tab, opener: opener, foreground: disposition != "new_background_tab")
+        runtime(runtime, adopt: tab, opener: opener, foreground: !TabRuntime.opensInBackground(disposition))
     }
 
     @objc(window:didActivateTab:)
