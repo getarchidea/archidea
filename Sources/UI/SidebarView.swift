@@ -368,7 +368,14 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
         renaming = nil
         renameLabel = nil
         let title = label?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if commit, !title.isEmpty { item.title = title }
+        if commit {
+            if item.isFolder {
+                if !title.isEmpty { item.title = title }
+            } else {
+                // Emptied, or set back to the page's own title: the tab follows the page again.
+                item.customTitle = title.isEmpty || title == item.title ? nil : title
+            }
+        }
         if let label, window?.firstResponder === label.currentEditor() { window?.makeFirstResponder(nil) }
         (label?.superview as? SidebarCell)?.endEditing()
         outline.reloadItem(item, reloadChildren: false)
@@ -520,7 +527,7 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
         let row = outline.clickedRow
         guard row >= 0, let item = outline.item(atRow: row) as? SidebarItem else { return }
         // The table reports the second click of a quick series here instead of as a click: a folder still toggles on it.
-        if item.isFolder { toggleFolder(item) } else if space.isPinned(item) { rename(item) }
+        if item.isFolder { toggleFolder(item) } else { rename(item) }
     }
 
     func toggleFolder(_ folder: SidebarItem) {
@@ -836,8 +843,13 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
         if pinned, let home = item.pinnedURL, home != item.url {
             menu.addItem(ClosureMenuItem(L("tab.resetPin")) { [weak self] in self?.delegate?.sidebarResetPin(item) })
         }
-        if pinned {
-            menu.addItem(ClosureMenuItem(L("item.rename")) { [weak self] in DispatchQueue.main.async { self?.rename(item) } })
+        menu.addItem(ClosureMenuItem(L("item.rename")) { [weak self] in DispatchQueue.main.async { self?.rename(item) } })
+        if item.customTitle != nil {
+            menu.addItem(ClosureMenuItem(L("tab.resetName")) { [weak self] in
+                item.customTitle = nil
+                self?.outline.reloadItem(item, reloadChildren: false)
+                self?.delegate?.sidebarChanged()
+            })
         }
         menu.addItem(ClosureMenuItem(L("tab.copyLink")) {
             NSPasteboard.general.clearContents()

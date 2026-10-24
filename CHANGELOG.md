@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Any tab can be renamed (double-click it, or Rename in its menu), and the name stays when the page changes its
+  title; “Use the Page’s Title” takes it back.
+
 - Site and app cards in the page's corner move aside when the hidden sidebar slides out, instead of ending up
   underneath it.
 

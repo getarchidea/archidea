@@ -84,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ExternalAppDemo.runIfRequested(controller)
         MinimizeDemo.runIfRequested(controller)
         CardsDemo.runIfRequested(controller)
+        RenameDemo.runIfRequested(controller)
         #endif
     }
 

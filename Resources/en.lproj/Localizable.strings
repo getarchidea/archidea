@@ -389,3 +389,4 @@
 "externalApp.always" = "Always";
 "externalApp.none" = "No app on this Mac opens “%@:” links";
 "import.progress.icons" = "Bringing site icons…";
+"tab.resetName" = "Use the Page’s Title";

@@ -13,6 +13,8 @@ final class SidebarItem: Codable {
     var lastActive: Date
     /// SF Symbol for a folder; nil shows the plain folder.
     var icon: String?
+    /// A name the user gave the tab; the page's own title no longer shows while it's set.
+    var customTitle: String?
 
     init(tab url: String, title: String = "") {
         id = UUID()
@@ -37,6 +39,7 @@ final class SidebarItem: Codable {
     var isFolder: Bool { kind == .folder }
 
     var displayTitle: String {
+        if let customTitle, !customTitle.isEmpty { return customTitle }
         if !title.isEmpty { return title }
         if let host = URL(string: url)?.host { return host }
         return url.isEmpty ? "New Tab" : url

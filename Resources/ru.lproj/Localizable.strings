@@ -389,3 +389,4 @@
 "externalApp.always" = "Всегда";
 "externalApp.none" = "На этом Mac нет приложения для ссылок «%@:»";
 "import.progress.icons" = "Переношу иконки сайтов…";
+"tab.resetName" = "Вернуть название страницы";
