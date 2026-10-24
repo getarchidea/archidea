@@ -18,6 +18,16 @@ rm -rf "$out"
 mkdir -p "$out"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+# GitHub's macOS runners now and then answer "Resource busy" to hdiutil for a moment: each step is tried again,
+# and says why it failed.
+retry() {
+  for attempt in 1 2 3 4 5; do
+    "$@" && return 0
+    echo "  ($1 $2 failed, try $attempt of 5)" >&2
+    sleep $((attempt * 3))
+  done
+  return 1
+}
 
 echo "› app zip"
 ditto -c -k --keepParent "$app" "$out/$zip"
@@ -88,8 +98,8 @@ ditto "$app" "$stage/Archidea.app"
 ln -s /Applications "$stage/Applications"
 cp "$work/background.tiff" "$stage/.background/background.tiff"
 rw="$work/rw.dmg"
-hdiutil create -quiet -volname "Archidea" -srcfolder "$stage" -fs APFS -format UDRW -size 600m -ov "$rw"
-attached=$(hdiutil attach -readwrite -noverify -noautoopen "$rw")
+retry hdiutil create -volname "Archidea" -srcfolder "$stage" -fs APFS -format UDRW -size 600m -ov "$rw" >/dev/null
+attached=$(retry hdiutil attach -readwrite -noverify -noautoopen "$rw")
 device=$(echo "$attached" | awk '/\/Volumes\// { print $1; exit }')
 volume=$(echo "$attached" | awk -F'\t' '/\/Volumes\// { print $NF; exit }')
 disk=$(basename "$volume")
@@ -147,7 +157,7 @@ for attempt in 1 2 3 4 5 6; do
   sleep 2
   [ "$attempt" = 6 ] && hdiutil detach -quiet -force "$device"
 done
-hdiutil convert -quiet "$rw" -format ULFO -o "$out/$dmg"
+retry hdiutil convert -quiet "$rw" -format ULFO -ov -o "$out/$dmg"
 identity=${DRIFT_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application|Apple Development/ { print $2; exit }')}
 [ -n "$identity" ] && codesign --force --sign "$identity" "$out/$dmg" >/dev/null 2>&1 || true
 
