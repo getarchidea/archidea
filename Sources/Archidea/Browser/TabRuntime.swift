@@ -25,6 +25,10 @@ protocol TabRuntimeDelegate: AnyObject {
 
 /// Owns the live Chrome tabs. A sidebar item gets a tab only when it is opened.
 final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
+    /// Whether Chrome opened a tab behind the page (a middle click, ⌘-click, Open Link in New Tab). The engine names
+    /// that `background_tab`; Chrome's own name is `new_background_tab`.
+    static func opensInBackground(_ disposition: String) -> Bool { disposition.hasSuffix("background_tab") }
+
     /// Background tabs untouched this long are discarded; 0 never discards.
     var unloadMinutes = 30
 

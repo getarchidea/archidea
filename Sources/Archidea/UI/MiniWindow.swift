@@ -162,7 +162,7 @@ final class MiniWindowController: NSObject, ArdiaCoreWindowDelegate, ArdiaCoreTa
     @objc(window:didInsertTab:opener:disposition:)
     func window(_ window: ArdiaCoreWindow, didInsert inserted: ArdiaCoreTab, opener: ArdiaCoreTab?, disposition: String) {
         guard inserted !== tab, let browser = (NSApp.delegate as? AppDelegate)?.windowController else { return }
-        browser.adoptPage(inserted, foreground: disposition != "new_background_tab")
+        browser.adoptPage(inserted, foreground: !TabRuntime.opensInBackground(disposition))
     }
 
     @objc(window:passwordPrompt:forTab:)
