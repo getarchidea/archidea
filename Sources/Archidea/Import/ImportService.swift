@@ -236,10 +236,13 @@ final class ImportService {
             steps.append { next in
                 progress(L("import.progress.bookmarks"))
                 let ops = Self.bookmarkOps(root, browser: browser)
-                summary.bookmarks = ops.filter { $0["k"] as? String == "u" }.count
+                summary.bookmarks = ops.filter { $0.kind == .url }.count
                 Self.sequence(stride(from: 0, to: ops.count, by: 500).map { start in
                     { (after: @escaping () -> Void) in
-                        EngineCall.call("ac_bookmarks_apply", profile: profile, args: ["ops": Array(ops[start..<min(start + 500, ops.count)])], timeout: Self.stepTimeout) { _ in after() }
+                        profile.services.applyBookmarks(Array(ops[start..<min(start + 500, ops.count)]), timeout: Self.stepTimeout) { result in
+                            if case let .failure(failure) = result { Trace.log("import: bookmarks \(failure)") }
+                            after()
+                        }
                     }
                 }, then: next)
             }
@@ -247,11 +250,14 @@ final class ImportService {
         if !read.history.isEmpty {
             steps.append { next in
                 progress(L("import.progress.history"))
-                let rows = read.history.map { ["u": $0.url, "t": $0.title, "n": $0.visits, "l": $0.lastVisit] as [String: Any] }
+                let rows = read.history.map { EngineServices.ImportedVisit(url: $0.url, title: $0.title, visits: $0.visits, lastVisit: $0.lastVisit) }
                 Self.sequence(stride(from: 0, to: rows.count, by: 2000).map { start in
                     { (after: @escaping () -> Void) in
-                        EngineCall.call("ac_history_import", profile: profile, args: ["rows": Array(rows[start..<min(start + 2000, rows.count)])], timeout: Self.stepTimeout) { reply in
-                            if reply?["error"] == nil { summary.history += min(2000, rows.count - start) }
+                        profile.services.importHistory(Array(rows[start..<min(start + 2000, rows.count)]), timeout: Self.stepTimeout) { result in
+                            switch result {
+                            case .success: summary.history += min(2000, rows.count - start)
+                            case let .failure(failure): Trace.log("import: history \(failure)")
+                            }
                             after()
                         }
                     }
@@ -273,8 +279,8 @@ final class ImportService {
                                                                                  "password": credential.password])) ?? Data()
                         json.append(0)
                         json.withUnsafeBytes { bytes in
-                            EngineCall.callSecret("ac_passwords_add", profile: profile, json: bytes, timeout: Self.stepTimeout) { reply in
-                                if let reply, reply["error"] == nil { summary.passwords += 1 }
+                            profile.services.addPassword(json: bytes, timeout: Self.stepTimeout) { result in
+                                if case .success = result { summary.passwords += 1 }
                                 after()
                             }
                         }
@@ -295,8 +301,11 @@ final class ImportService {
                 Self.sequence(wire.batches.map { batch in
                     { after in
                         batch.withUnsafeBytes { bytes in
-                            EngineCall.callSecret("ac_cookies_import", profile: profile, json: bytes, timeout: Self.stepTimeout) { reply in
-                                summary.cookies += reply?["imported"] as? Int ?? 0
+                            profile.services.importCookies(json: bytes, timeout: Self.stepTimeout) { result in
+                                switch result {
+                                case let .success(imported): summary.cookies += imported
+                                case let .failure(failure): Trace.log("import: cookies \(failure)")
+                                }
                                 after()
                             }
                         }
@@ -317,8 +326,8 @@ final class ImportService {
                     Self.sequence(stride(from: lane, to: icons.count, by: lanes).map { index in
                         { (after: @escaping () -> Void) in
                             guard let png = Self.png(icons[index].data) else { return after() }
-                            EngineCall.call("ac_favicons_set", profile: profile,
-                                            args: ["page": icons[index].page, "icon": icons[index].icon, "png": png.base64EncodedString()], timeout: Self.stepTimeout) { _ in after() }
+                            profile.services.setFavicon(page: icons[index].page, icon: icons[index].icon, png: png,
+                                                        timeout: Self.stepTimeout) { _ in after() }
                         }
                     }, then: { group.leave() })
                 }
@@ -360,19 +369,19 @@ final class ImportService {
 
     /// The imported tree as bookmark operations: the bar's links into a folder on the bar, the rest into one under
     /// Other Bookmarks, both named for the browser they came from.
-    private static func bookmarkOps(_ root: BookmarkNode, browser: String) -> [[String: Any]] {
-        var ops: [[String: Any]] = []
+    private static func bookmarkOps(_ root: BookmarkNode, browser: String) -> [EngineServices.BookmarkOp] {
+        var ops: [EngineServices.BookmarkOp] = []
         let now = Date().timeIntervalSince1970 * 1000
         func add(_ node: BookmarkNode, parent: String) {
             let id = UUID().uuidString.lowercased()
             switch node.type {
             case .folder:
-                ops.append(["op": "add", "id": id, "k": "f", "t": node.title, "a": node.dateAdded ?? now, "parent": parent])
+                ops.append(.init(id: id, kind: .folder, title: node.title, url: nil, added: node.dateAdded ?? now, parent: parent))
                 node.children?.forEach { add($0, parent: id) }
             case .url:
                 guard let url = node.url else { return }
-                ops.append(["op": "add", "id": id, "k": "u", "t": node.title.isEmpty ? url : node.title, "u": url,
-                            "a": node.dateAdded ?? now, "parent": parent])
+                ops.append(.init(id: id, kind: .url, title: node.title.isEmpty ? url : node.title, url: url,
+                                 added: node.dateAdded ?? now, parent: parent))
             }
         }
         let children = root.children ?? []

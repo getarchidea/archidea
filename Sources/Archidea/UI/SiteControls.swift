@@ -224,10 +224,10 @@ final class SiteControls: NSViewController {
 
     private func loadPermissions(_ origin: String) {
         guard let profile = controller?.profile else { return }
-        EngineCall.call("ac_site_settings_get", profile: profile, args: ["origin": origin]) { [weak self] reply in
-            guard let self, let settings = reply?["settings"] as? [String: [String: Any]] else { return }
+        profile.services.siteSettings(origin: origin) { [weak self] result in
+            guard let self, let settings = try? result.get() else { return }
             for (type, popup) in permissionPopups {
-                let value = settings[type]?["value"] as? String ?? "ask"
+                let value = settings[type] ?? "ask"
                 if let index = popup.itemArray.firstIndex(where: { $0.representedObject as? String == value }) { popup.selectItem(at: index) }
                 popup.isEnabled = settings[type] != nil
             }
@@ -237,8 +237,8 @@ final class SiteControls: NSViewController {
     @objc private func permissionChanged(_ sender: NSPopUpButton) {
         guard let origin, let profile = controller?.profile, let type = sender.identifier?.rawValue,
               let value = sender.selectedItem?.representedObject as? String else { return }
-        EngineCall.call("ac_site_settings_set", profile: profile, args: ["origin": origin, "type": type, "value": value]) { reply in
-            Trace.log("site setting \(type)=\(value): \(reply ?? [:])")
+        profile.services.setSiteSetting(origin: origin, type: type, value: value) { result in
+            if case let .failure(failure) = result { Trace.log("site setting \(type)=\(value): \(failure)") }
         }
         if type == "sound" { tab.muted = value == "block" }
     }
@@ -250,8 +250,8 @@ final class SiteControls: NSViewController {
         popover?.close()
         controller.confirm(host: host, icon: tab.favicon, title: L("site.clearData.title", host), detail: L("site.clearData.text"),
                            confirm: L("site.clearData.confirm")) { [weak tab] in
-            EngineCall.call("ac_site_data_clear", profile: profile, args: ["origin": origin]) { reply in
-                Trace.log("cleared a site's data: \(reply ?? [:])")
+            profile.services.clearSiteData(origin: origin) { result in
+                if case let .failure(failure) = result { Trace.log("clearing a site's data: \(failure)") }
                 tab?.reload()
             }
         }
