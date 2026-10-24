@@ -25,14 +25,27 @@ extension BrowserWindowController {
         if change.contains(.saved) { store.setNeedsSave() }
     }
 
+    /// A page opened from a Today tab goes right above it, so the pages a tab opened sit by it in the order they were
+    /// opened; from a pin, or from nowhere, it goes to the top of Today like a new tab. One opened in the background
+    /// (a middle click, Open Link in New Tab) stays there.
     func runtime(_ runtime: TabRuntime, adopt tab: ArdiaCoreTab, opener: ArdiaCoreTab?, foreground: Bool) {
         let item = SidebarItem(tab: tab.url, title: tab.title)
-        let owner = opener.flatMap { runtime.item(for: $0) }.flatMap { state.space(containing: $0) } ?? space
-        owner.today.insert(item, at: 0)
+        let from = opener.flatMap { runtime.item(for: $0) }
+        let owner = from.flatMap { state.space(containing: $0) } ?? space
+        let index = from.flatMap { source in owner.today.firstIndex { $0 === source } } ?? 0
+        owner.today.insert(item, at: index)
         runtime.bind(tab, to: item)
         if owner === space { sidebar.reload() }
         group.sidebarChanged(by: self)
-        if foreground { select(item, cause: "chrome-new-tab") } else { tab.view.isHidden = true }
+        if foreground {
+            select(item, cause: "chrome-new-tab")
+        } else {
+            tab.view.isHidden = true
+            // Chrome may make the new tab its active one, or the page may ask to come forward as it opens; the page
+            // in front stays in front.
+            ownActivation = (shownTab, Date().addingTimeInterval(1.5))
+            openedBehind = (tab, Date().addingTimeInterval(1.5))
+        }
         store.setNeedsSave()
     }
 
@@ -65,6 +78,9 @@ extension BrowserWindowController {
     }
 
     func runtime(_ runtime: TabRuntime, tabNeedsActivation tab: ArdiaCoreTab) {
+        if let behind = openedBehind, behind.tab === tab, Date() < behind.until {
+            return Trace.log("ignored a request to activate a tab that just opened in the background")
+        }
         if let item = runtime.item(for: tab), item !== activeItem { select(item, cause: "tab-requests-activation") }
     }
 
@@ -73,6 +89,7 @@ extension BrowserWindowController {
     @objc(window:didInsertTab:opener:disposition:)
     func window(_ window: ArdiaCoreWindow, didInsert tab: ArdiaCoreTab, opener: ArdiaCoreTab?, disposition: String) {
         guard !runtime.isMine(tab) else { return }
+        Trace.log("chrome opened a tab: \(disposition), from \(opener.flatMap { runtime.item(for: $0)?.traceName } ?? "no tab")")
         runtime(runtime, adopt: tab, opener: opener, foreground: disposition != "new_background_tab")
     }
 

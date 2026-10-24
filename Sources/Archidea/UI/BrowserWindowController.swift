@@ -765,6 +765,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// The tab we just made active (nil: we just closed or switched away), and until when Chrome's own
     /// activation notices count as echoes of that.
     var ownActivation: (tab: ArdiaCoreTab?, until: Date)?
+    /// A page that just opened in the background, and until when its own requests to be activated are ignored.
+    var openedBehind: (tab: ArdiaCoreTab, until: Date)?
 
     private func expectActivation(of tab: ArdiaCoreTab?) {
         ownActivation = (tab ?? ownActivation?.tab, Date().addingTimeInterval(1.5))
@@ -839,6 +841,9 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         commandBar.show(in: root, editing: editing, current: editing ? (activeTab?.url ?? activeItem?.url) : nil, anchor: anchor,
                         over: startSearchFrame)
     }
+
+    /// The address bar is open: over the slid-out sidebar when it opened from the sidebar's address.
+    var commandBarIsOpen: Bool { commandBar.isOpen }
 
     func commandBarDidHide() {
         if let tab = activeTab { tab.focus() } else { window.makeFirstResponder(nil) }
