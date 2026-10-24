@@ -552,8 +552,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         let key = NSApp.keyWindow
         Trace.log("app active, key window: \(key.map { NSStringFromClass(type(of: $0)) } ?? "none") visible=\(key?.isVisible ?? false)")
         if let key, key === window || key === window.attachedSheet { return }
+        // A mini window just brought forward keeps the keyboard it's about to take.
+        if NSApp.orderedWindows.first(where: \.isVisible)?.identifier == MiniWindowController.identifier { return }
         // Another browser window (a private one, say) keeps the keyboard it has.
-        if let key, key.isVisible, key.identifier == TrafficLights.identifier { return }
+        if let key, key.isVisible, key.identifier == TrafficLights.identifier || key.identifier == MiniWindowController.identifier { return }
         if let key, key.isVisible, key.alphaValue > 0, key === SettingsWindowController.shared.window
             || key.parent === window || key is NSPanel || NSStringFromClass(type(of: key)).contains("Popover") { return }
         window.makeKey()

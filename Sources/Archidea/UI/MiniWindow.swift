@@ -20,6 +20,8 @@ final class MiniWindowController: NSObject, ArdiaCoreWindowDelegate, ArdiaCoreTa
     var window: NSWindow { coreWindow.window }
 
     static let size = NSSize(width: 1000, height: 720)
+    /// Marks the window as one of ours, so the browser window leaves it the keyboard.
+    static let identifier = NSUserInterfaceItemIdentifier("archidea.mini")
 
     init(url: String, profile: ArdiaCoreProfile, cascadeFrom previous: NSWindow?, onClose: @escaping (MiniWindowController) -> Void) {
         self.profile = profile
@@ -40,6 +42,7 @@ final class MiniWindowController: NSObject, ArdiaCoreWindowDelegate, ArdiaCoreTa
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
+        window.identifier = Self.identifier
         window.tabbingMode = .disallowed
         window.minSize = NSSize(width: 480, height: 360)
         window.setContentSize(Self.size)
@@ -51,11 +54,13 @@ final class MiniWindowController: NSObject, ArdiaCoreWindowDelegate, ArdiaCoreTa
         }
     }
 
+    /// Into the engine's host view, like the browser window: the window's content view also holds the engine's
+    /// own view, which lies on top and would take every click.
     private func buildViews() {
-        guard let contentView = window.contentView else { return }
-        root.frame = contentView.bounds
+        let host = coreWindow.hostView
+        root.frame = host.bounds
         root.autoresizingMask = [.width, .height]
-        contentView.addSubview(root)
+        host.addSubview(root)
         root.addSubview(bar)
         root.addSubview(page)
         root.addSubview(loadingBar)
@@ -82,11 +87,27 @@ final class MiniWindowController: NSObject, ArdiaCoreWindowDelegate, ArdiaCoreTa
         loadingBar.frame = NSRect(x: page.frame.midX - size.width / 2, y: page.frame.maxY + 2, width: size.width, height: size.height)
     }
 
+    /// Coming from another app, AppKit gives the keyboard back to the window that had it last (the browser
+    /// window) once activation completes; the mini window takes it after that.
     func show() {
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
         tab.noteShown(byHost: true)
+        window.makeKeyAndOrderFront(nil)
+        guard !NSApp.isActive else { return takeKeyboard() }
+        activation = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            activation.map(NotificationCenter.default.removeObserver)
+            activation = nil
+            DispatchQueue.main.async { self.takeKeyboard() }
+        }
+        NSApp.activate()
+    }
+
+    private var activation: NSObjectProtocol?
+
+    private func takeKeyboard() {
+        window.makeKeyAndOrderFront(nil)
         tab.focus()
+        Trace.log("mini window: key=\(window.isKeyWindow), app active=\(NSApp.isActive)")
     }
 
     private func update() {
@@ -183,6 +204,17 @@ final class MiniWindowController: NSObject, ArdiaCoreWindowDelegate, ArdiaCoreTa
         DispatchQueue.main.async { [weak self] in self?.close() }
     }
 }
+
+#if DRIFT_DEV
+extension MiniWindowController {
+    /// The "Open in Archidea" button's centre and a point in the page, in window coordinates.
+    var debugPoints: (button: NSPoint, page: NSPoint) {
+        let open = bar.subviews.first { NSStringFromClass(type(of: $0)).contains("MiniOpenButton") }!
+        let button = open.convert(NSPoint(x: open.bounds.midX, y: open.bounds.midY), to: nil)
+        return (button, page.convert(NSPoint(x: page.bounds.midX, y: page.bounds.midY), to: nil))
+    }
+}
+#endif
 
 /// The mini window's backdrop: the window's own material, the page laid on it like in the browser window.
 private final class MiniRootView: NSVisualEffectView {
@@ -291,6 +323,9 @@ private final class MiniOpenButton: NSView {
     private var labelWidth: CGFloat { ceil(label.attributedStringValue.size().width) + 2 }
 
     override var fittingSize: NSSize { NSSize(width: labelWidth + 44, height: 26) }
+
+    /// The whole capsule is the button, label and glyph included.
+    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
 
     override func layout() {
         super.layout()
