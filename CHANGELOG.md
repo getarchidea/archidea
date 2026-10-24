@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **Icons for folders and spaces**: about 140 symbols to search through, and emoji: a grid of common ones, and any other
+  typed in, pasted or picked from the Character Viewer. A folder's icon is an outline while it's open and filled while
+  it's closed; the current space's icon is filled, the others' outlines. Spaces imported from Arc keep their emoji.
 - The mini window takes clicks and the keyboard: the page, its links and the toolbar's buttons all work, and it
   keeps focus when it opens from another app instead of handing it to the browser window.
 - A folder dragged onto another space's button lands among that space's pins. Before, it went into Today and the

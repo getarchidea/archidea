@@ -401,7 +401,7 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
     func pickIcon(for item: SidebarItem) {
         let row = outline.row(forItem: item)
         guard row >= 0 else { return }
-        let picker = IconPicker(symbols: SpaceStyle.folderSymbols, selected: item.icon ?? "folder",
+        let picker = IconPicker(selected: item.icon ?? "folder",
                                 tint: NSColor(hex: space.colorHex)) { [weak self] symbol in
             item.icon = symbol == "folder" ? nil : symbol
             self?.outline.reloadItem(item, reloadChildren: false)
@@ -455,7 +455,7 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
         let isCurrent = target === space
         menu.addItem(ClosureMenuItem(L("space.changeIcon")) { [weak self] in
             guard let self else { return }
-            let picker = IconPicker(symbols: SpaceStyle.symbols, selected: target.symbol, tint: NSColor(hex: target.colorHex)) { [weak self] symbol in
+            let picker = IconPicker(selected: target.symbol, tint: NSColor(hex: target.colorHex)) { [weak self] symbol in
                 self?.delegate?.sidebarRestyle(target, color: nil, symbol: symbol)
             }
             let from = isCurrent ? header : anchor
@@ -839,7 +839,7 @@ final class SidebarView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate,
             let sub = NSMenu()
             for target in others {
                 let entry = ClosureMenuItem(target.name) { [weak self] in self?.delegate?.sidebarMove(item, to: target) }
-                entry.image = NSImage(systemSymbolName: target.symbol, accessibilityDescription: nil)
+                entry.image = Glyphs.image(target.symbol, filled: false, pointSize: 13)
                 sub.addItem(entry)
             }
             move.submenu = sub

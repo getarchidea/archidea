@@ -408,3 +408,8 @@
 "space.delete.confirm" = "Delete";
 "update.cantInstall" = "Archidea can’t update where it is";
 "update.cantInstall.detail" = "Move Archidea to the Applications folder, open it from there and press Restart again.";
+"icons.symbols" = "Symbols";
+"icons.emoji" = "Emoji";
+"icons.search" = "Search symbols";
+"icons.anyEmoji" = "Type or paste any emoji";
+"icons.allEmoji" = "All Emoji (⌃⌘Space)";
