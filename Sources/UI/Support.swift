@@ -53,15 +53,30 @@ enum Trace {
         formatter.dateFormat = "HH:mm:ss.SSS"
         return formatter
     }()
+    /// Lines come from the main thread and from background work (an import, the password managers' check) at once;
+    /// the list, the formatter and the file are only touched under this.
+    private static let lock = NSLock()
 
+    /// Lines are about what the app did, never what was browsed: no page titles, no addresses (`site(_:)` keeps
+    /// only the scheme), since a saved log ends up attached to public issues.
     static func log(_ message: @autoclosure () -> String) {
-        let line = "\(stamp.string(from: Date())) \(message())"
+        let text = message()
+        lock.lock()
+        defer { lock.unlock() }
+        let line = "\(stamp.string(from: Date())) \(text)"
         recent.append(line)
         if recent.count > capacity { recent.removeFirst(recent.count - capacity) }
         guard enabled else { return }
-        let text = "[trace] \(line)\n"
-        FileHandle.standardError.write(text.data(using: .utf8)!)
-        file?.write(text.data(using: .utf8)!)
+        let output = Data("[trace] \(line)\n".utf8)
+        FileHandle.standardError.write(output)
+        file?.write(output)
+    }
+
+    /// An address as the log may show it: its kind, not where it goes.
+    static func site(_ url: String) -> String {
+        guard !url.isEmpty else { return "nothing" }
+        guard let scheme = URL(string: url)?.scheme else { return "an address" }
+        return "\(scheme): page"
     }
 
     /// Writes what's been kept to ~/Library/Logs/Archidea and returns the file.
@@ -74,26 +89,15 @@ enum Trace {
         let info = Bundle.main.infoDictionary
         let header = "Archidea \(info?["CFBundleShortVersionString"] ?? "?") (\(info?["CFBundleVersion"] ?? "?")), "
             + "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)\n"
-        guard (try? (header + recent.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }
+        lock.lock()
+        let lines = recent
+        lock.unlock()
+        guard (try? (header + lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }
         return url
     }
 }
 
-enum SpaceStyle {
-    static let palette = ["#7C8CF8", "#F28C6B", "#5EC48B", "#E06BB5", "#F2C14E", "#4FB3D9", "#A07CF8", "#8A8F98"]
-    static var names: [String] { ["indigo", "coral", "mint", "pink", "sun", "sky", "lavender", "graphite"].map { L("color.\($0)") } }
-    static let symbols = ["house", "briefcase", "book", "gamecontroller", "music.note", "paintbrush", "leaf", "star",
-                          "heart", "bolt", "cart", "graduationcap", "airplane", "camera", "flame", "moon"]
-
-    static let folderSymbols = ["folder", "star", "heart", "bolt", "flame", "sparkles",
-                                "briefcase", "hammer", "chart.bar", "doc.text", "newspaper", "book",
-                                "graduationcap", "paintbrush", "music.note", "gamecontroller", "camera", "film",
-                                "cart", "airplane", "leaf", "globe", "flag", "bookmark"]
-
-    static func colorName(_ hex: String) -> String {
-        palette.firstIndex(of: hex).map { names[$0] } ?? hex
-    }
-
+extension SpaceStyle {
     static func swatch(_ hex: String) -> NSImage {
         NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
             NSColor(hex: hex).setFill()
@@ -110,48 +114,6 @@ extension NSColor {
         self.init(srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
                   blue: CGFloat(value & 0xFF) / 255, alpha: 1)
     }
-}
-
-enum URLInput {
-    static var engine = SearchEngine.google
-    static var searchTemplate: String { engine.template }
-
-    static func resolve(_ raw: String) -> String {
-        let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if input.isEmpty { return "about:blank" }
-        let lower = input.lowercased()
-        for scheme in ["http://", "https://", "file://", "about:", "chrome:", "chrome-extension:", "data:", "view-source:"] where lower.hasPrefix(scheme) {
-            return input
-        }
-        if !input.contains(" ") {
-            let host = lower.split(separator: "/").first.map(String.init) ?? lower
-            let bare = host.split(separator: ":").first.map(String.init) ?? host
-            if bare == "localhost" || bare.hasSuffix(".localhost") || isIPv4(bare) { return "http://\(input)" }
-            if let tld = bare.split(separator: ".").last, bare.contains("."), tld.count >= 2, tld.allSatisfy(\.isLetter) {
-                return "https://\(input)"
-            }
-        }
-        let query = input.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? input
-        return searchTemplate.replacingOccurrences(of: "%@", with: query)
-    }
-
-    static func isSearch(_ input: String) -> Bool {
-        let prefix = searchTemplate.components(separatedBy: "%@")[0]
-        return resolve(input).hasPrefix(prefix)
-    }
-
-    private static func isIPv4(_ host: String) -> Bool {
-        let parts = host.split(separator: ".")
-        return parts.count == 4 && parts.allSatisfy { Int($0).map { (0...255).contains($0) } ?? false }
-    }
-}
-
-extension CharacterSet {
-    static let urlQueryValueAllowed: CharacterSet = {
-        var set = CharacterSet.urlQueryAllowed
-        set.remove(charactersIn: "&+=?#")
-        return set
-    }()
 }
 
 final class ClosureMenuItem: NSMenuItem {

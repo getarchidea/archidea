@@ -51,6 +51,9 @@ final class Updater {
 
     private func fail(_ failure: Failure, _ detail: String) {
         Trace.log("updates: \(detail)")
+        // The manifest's ETag stood for an answer that came to nothing: the next check reads it in full, or an
+        // unchanged manifest would pass for "up to date" and the update that failed would never come again.
+        etag = nil
         state = .failed(failure.message)
     }
 
@@ -192,10 +195,10 @@ final class Updater {
         }
         etag = response.value(forHTTPHeaderField: "ETag")
         Trace.log("updates: newest release is \(version)")
-        guard Self.isNewer(version, than: currentVersion) else { return state = .upToDate }
+        guard ReleaseVersion.isNewer(version, than: currentVersion) else { return state = .upToDate }
         let os = ProcessInfo.processInfo.operatingSystemVersion
         if let minimum = manifest["minimumSystemVersion"] as? String,
-           Self.isNewer(minimum, than: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)") {
+           ReleaseVersion.isNewer(minimum, than: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)") {
             return state = .upToDate
         }
         guard let platform = (manifest["platforms"] as? [String: Any])?["darwin-\(Self.arch)"] as? [String: Any],
@@ -204,16 +207,6 @@ final class Updater {
             return fail(.server, "latest.json has no darwin-\(Self.arch) update")
         }
         download(version: version, from: link, sha256: platform["sha256"] as? String, signature: signature)
-    }
-
-    static func isNewer(_ candidate: String, than current: String) -> Bool {
-        let parts = { (text: String) in text.split(whereSeparator: { !$0.isNumber }).map { Int($0) ?? 0 } }
-        let a = parts(candidate), b = parts(current)
-        for index in 0..<max(a.count, b.count) {
-            let x = index < a.count ? a[index] : 0, y = index < b.count ? b[index] : 0
-            if x != y { return x > y }
-        }
-        return false
     }
 
     // MARK: downloading
@@ -303,33 +296,22 @@ final class Updater {
         return true
     }
 
-    /// From the "Restart to update" button.
-    func installNow() {
-        guard case .ready = state, install(relaunch: true) else { return }
+    /// From the "Restart to update" button. False when the update can't go in where the app is (a copy run from
+    /// the disk image or straight from Downloads, which macOS keeps read-only): the app keeps running.
+    @discardableResult
+    func installNow() -> Bool {
+        guard case .ready = state else { return false }
+        guard install(relaunch: true) else {
+            Trace.log("updates: can't replace the app at its location")
+            return false
+        }
         NSApp.terminate(nil)
+        return true
     }
 
     /// When the app quits on its own.
     func installOnQuit() {
         guard installsAutomatically, case .ready = state else { return }
         _ = install(relaunch: false)
-    }
-}
-
-/// Checks a minisign signature (the Ed25519 kind made with `minisign -S -l`) against the release key built into
-/// the app: the signature over the file, and the global one over the signature and its trusted comment.
-enum Minisign {
-    static func verify(signature text: String, file: URL, publicKey: String, comment: String) -> Bool {
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-        guard lines.count >= 4,
-              let signature = Data(base64Encoded: lines[1]), signature.count == 74,
-              let keyData = Data(base64Encoded: publicKey), keyData.count == 42,
-              signature.prefix(2) == Data("Ed".utf8), Data(signature[2..<10]) == Data(keyData[2..<10]),
-              let key = try? Curve25519.Signing.PublicKey(rawRepresentation: Data(keyData.suffix(32))),
-              let contents = try? Data(contentsOf: file, options: .mappedIfSafe),
-              key.isValidSignature(Data(signature.suffix(64)), for: contents) else { return false }
-        let trusted = lines[2].hasPrefix("trusted comment: ") ? String(lines[2].dropFirst("trusted comment: ".count)) : ""
-        guard trusted == comment, let global = Data(base64Encoded: lines[3]), global.count == 64 else { return false }
-        return key.isValidSignature(global, for: Data(signature.suffix(64)) + Data(trusted.utf8))
     }
 }

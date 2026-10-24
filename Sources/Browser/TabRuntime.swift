@@ -1,7 +1,17 @@
 import AppKit
 
+/// What changed about a live tab, so the window does only what that calls for.
+struct TabChange: OptionSet {
+    let rawValue: Int
+    /// The title or the address: what the sidebar keeps on disk.
+    static let saved = TabChange(rawValue: 1 << 0)
+    static let favicon = TabChange(rawValue: 1 << 1)
+    /// Loading, back and forward, sound, being put to sleep: shown, never saved.
+    static let shown = TabChange(rawValue: 1 << 2)
+}
+
 protocol TabRuntimeDelegate: AnyObject {
-    func runtime(_ runtime: TabRuntime, didUpdate item: SidebarItem)
+    func runtime(_ runtime: TabRuntime, didUpdate item: SidebarItem, change: TabChange)
     func runtime(_ runtime: TabRuntime, adopt tab: ArdiaCoreTab, opener: ArdiaCoreTab?, foreground: Bool)
     func runtime(_ runtime: TabRuntime, tabDidClose item: SidebarItem)
     func runtime(_ runtime: TabRuntime, downloadTookOver item: SidebarItem)
@@ -93,21 +103,30 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
 
     // MARK: ArdiaCoreTabDelegate
 
-    private func changed(_ tab: ArdiaCoreTab, _ update: (SidebarItem) -> Void = { _ in }) {
+    /// `update` returns whether it changed what's saved; only then does the sidebar get written out again.
+    private func changed(_ tab: ArdiaCoreTab, _ change: TabChange = .shown, _ update: (SidebarItem) -> Bool = { _ in false }) {
         guard let item = item(for: tab) else { return }
-        update(item)
-        delegate?.runtime(self, didUpdate: item)
+        let change = update(item) ? change.union(.saved) : change
+        delegate?.runtime(self, didUpdate: item, change: change)
     }
 
     @objc(tabDidChangeTitle:) func tabDidChangeTitle(_ tab: ArdiaCoreTab) {
-        changed(tab) { item in if !tab.title.isEmpty, item.pinnedURL == nil || item.title.isEmpty { item.title = tab.title } }
+        changed(tab) { item in
+            guard !tab.title.isEmpty, item.pinnedURL == nil || item.title.isEmpty, item.title != tab.title else { return false }
+            item.title = tab.title
+            return true
+        }
     }
 
     @objc(tabDidChangeURL:) func tabDidChangeURL(_ tab: ArdiaCoreTab) {
-        changed(tab) { item in if !tab.url.isEmpty { item.url = tab.url } }
+        changed(tab) { item in
+            guard !tab.url.isEmpty, item.url != tab.url else { return false }
+            item.url = tab.url
+            return true
+        }
     }
 
-    @objc(tabDidChangeFavicon:) func tabDidChangeFavicon(_ tab: ArdiaCoreTab) { changed(tab) }
+    @objc(tabDidChangeFavicon:) func tabDidChangeFavicon(_ tab: ArdiaCoreTab) { changed(tab, .favicon) }
     @objc(tabDidChangeLoading:) func tabDidChangeLoading(_ tab: ArdiaCoreTab) {
         changed(tab)
         delegate?.runtime(self, loadingOf: tab)
@@ -143,7 +162,7 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
     /// download takes over: it goes, as in Chrome. A page that started a download stays.
     @objc(tab:navigationBecameDownload:)
     func tab(_ tab: ArdiaCoreTab, navigationBecameDownload url: String) {
-        Trace.log("download \(url) from a tab at \(tab.url.isEmpty ? "nothing" : tab.url), back=\(tab.canGoBack)")
+        Trace.log("download of \(Trace.site(url)) from a tab at \(tab.url == url ? "the same address" : Trace.site(tab.url)), back=\(tab.canGoBack)")
         guard !tab.canGoBack, tab.url.isEmpty || tab.url == "about:blank" || tab.url == url, let item = item(for: tab) else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }

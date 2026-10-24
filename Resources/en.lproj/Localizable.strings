@@ -403,3 +403,8 @@
 "start.hide" = "Remove from Start Page";
 "update.downloading" = "Downloading Archidea %@";
 "update.downloading.detail" = "It’s on its way; a Restart button shows in the sidebar once it’s ready.";
+"space.delete.title" = "Delete “%@”?";
+"space.delete.detail" = "It holds %@. Deleting it can’t be undone.";
+"space.delete.confirm" = "Delete";
+"update.cantInstall" = "Archidea can’t update where it is";
+"update.cantInstall.detail" = "Move Archidea to the Applications folder, open it from there and press Restart again.";

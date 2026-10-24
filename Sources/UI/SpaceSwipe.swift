@@ -1,0 +1,70 @@
+import AppKit
+
+/// Two fingers across the sidebar page between spaces, as in Arc: the list follows the fingers (with a rubber band
+/// past the first and last space), and on letting go it either carries on to the neighbour — when pulled a quarter
+/// of the way or flicked — or springs back. The momentum after the fingers lift is swallowed.
+final class SpaceSwipe {
+    private unowned let sidebar: SidebarView
+    /// The space a swipe by this offset brings: fingers moving right the previous one, left the next. None past the ends.
+    private let neighbour: (CGFloat) -> Space?
+    private let hasSeveralSpaces: () -> Bool
+    private let arrive: (Space) -> Void
+
+    private var offset: CGFloat = 0
+    private var velocity: CGFloat = 0
+    private var tracking = false
+    private var consumed = false
+
+    init(sidebar: SidebarView, hasSeveralSpaces: @escaping () -> Bool, neighbour: @escaping (CGFloat) -> Space?,
+         arrive: @escaping (Space) -> Void) {
+        self.sidebar = sidebar
+        self.hasSeveralSpaces = hasSeveralSpaces
+        self.neighbour = neighbour
+        self.arrive = arrive
+    }
+
+    /// Whether the scroll event (at `point`, in the sidebar's superview) was the swipe's and goes no further.
+    func handle(_ event: NSEvent, at point: NSPoint) -> Bool {
+        guard event.hasPreciseScrollingDeltas, hasSeveralSpaces() else { return false }
+        if event.momentumPhase != [] { return consumed }
+        switch event.phase {
+        case .began:
+            guard sidebar.frame.contains(point) else { return false }
+            offset = 0
+            tracking = false
+            consumed = false
+            return false
+        case .changed:
+            guard sidebar.frame.contains(point) || tracking else { return false }
+            if !tracking {
+                guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.5, abs(event.scrollingDeltaX) > 1 else { return false }
+                tracking = true
+            }
+            offset += event.scrollingDeltaX
+            velocity = event.scrollingDeltaX
+            let width = sidebar.bounds.width
+            sidebar.swipeOffset = neighbour(offset) != nil ? max(-width, min(width, offset)) : offset / 3
+            return true
+        case .ended, .cancelled:
+            guard tracking else { return false }
+            tracking = false
+            consumed = true
+            let width = sidebar.bounds.width
+            let flick = abs(velocity) > 14 && (velocity > 0) == (offset > 0)
+            if event.phase == .ended, let next = neighbour(offset), abs(offset) > width * 0.25 || flick {
+                let outward: CGFloat = offset > 0 ? width : -width
+                sidebar.settleSwipe(at: outward, duration: 0.16) { [weak self] in
+                    guard let self else { return }
+                    sidebar.swipeOffset = 0
+                    arrive(next)
+                }
+            } else {
+                sidebar.settleSwipe(at: 0, duration: 0.28)
+            }
+            offset = 0
+            return true
+        default:
+            return false
+        }
+    }
+}

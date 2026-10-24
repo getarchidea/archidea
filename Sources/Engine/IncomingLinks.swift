@@ -24,7 +24,7 @@ enum IncomingLinks {
     }
 
     static func receive(_ url: URL) {
-        Trace.log("link from another app: \(url.scheme ?? "?")://\(url.host ?? "")")
+        Trace.log("link from another app: \(Trace.site(url.absoluteString))")
         if let handler { handler(url) } else { pending.append(url) }
     }
 

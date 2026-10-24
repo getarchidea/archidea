@@ -26,6 +26,10 @@ jobs:
           path: vendor/engine/Chromium Framework.framework
           key: engine-${{ hashFiles('vendor/engine/ENGINE') }}
 
+      # The model, the import merge, address parsing and update checks, without the engine (Package.swift).
+      - name: Unit tests
+        run: swift test
+
       # build.sh also fails when a translation is missing a key.
       - name: Build
         env:

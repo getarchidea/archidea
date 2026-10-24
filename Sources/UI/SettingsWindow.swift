@@ -334,14 +334,10 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     // MARK: helpers
 
-    private var settings: BrowserSettings { browser?.state.settings ?? BrowserSettings() }
+    private var settings: BrowserSettings { browser?.settings ?? BrowserSettings() }
 
     private func update(_ change: (inout BrowserSettings) -> Void) {
-        guard let browser else { return }
-        var next = browser.state.settings
-        change(&next)
-        browser.state.settings = next
-        browser.settingsChanged()
+        browser?.updateSettings(change)
     }
 
     private func openPage(_ url: String) {

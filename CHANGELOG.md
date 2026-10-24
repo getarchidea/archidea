@@ -5,6 +5,24 @@ under *What's new*.
 
 ## [Unreleased]
 
+- A folder dragged onto another space's button lands among that space's pins. Before, it went into Today and the
+  next launch could archive it with every pin inside; a sidebar saved that way is put right on launch.
+- Deleting a space that holds tabs asks first.
+- ⇧⌘T and the start page's *Recently Closed* survive a restart, and a removed pin comes back to its place (its
+  folder, its position) instead of into Today.
+- Today tabs are archived while Archidea runs, not only at the next launch: every space keeps its tab in front and
+  tabs playing sound. Archived tabs are on ⇧⌘T.
+- A private window no longer switches the search engine (and the full-address setting) back to the defaults for
+  every window. Settings changed in a private window apply everywhere.
+- A pinned tab closed with no open Today tabs moves to another open pin, as 0.1.3 meant it to.
+- An update whose download failed is tried again on the next check instead of waiting for a restart; when it
+  can't go in where the app is (run from the disk image or Downloads), Archidea says so.
+- The diagnostic log no longer holds page titles or addresses, private windows' included, and can't be garbled by
+  two threads writing at once.
+- Archidea saves the sidebar only when something it keeps changed (not on every page load), writes it off the main
+  thread, and clears out icons of tabs that are gone.
+- Archidea can open web pages and saved links (.webloc) from Finder.
+
 ## [0.1.5] - 2026-10-24
 
 - **Check for Updates** really checks: it used to answer with the last background check's result, so a release

@@ -39,6 +39,13 @@ its SHA-256, and fetches uBlock Origin for the built-in blocker. If you have an 
 certificate, `build.sh` signs with it so macOS remembers camera and microphone permissions between builds;
 otherwise it signs ad hoc. `DRIFT_SIGN_IDENTITY` picks a certificate explicitly.
 
+The parts that need neither AppKit nor the engine (the sidebar's model, the import merge, address parsing, update
+checks) build as a Swift package and have unit tests; CI runs them on every pull request:
+
+```bash
+make test             # swift test
+```
+
 To try a build without touching your own profile, give it a separate data folder:
 
 ```bash
@@ -59,6 +66,7 @@ Archidea is Swift and AppKit around a Chromium engine framework that exposes an 
 | `Sources/Engine` | Engine startup and calls into Chromium's services |
 | `Sources/Import` | Reading other browsers' data and bringing it in |
 | `Resources` | Info.plist, translations, icons |
+| `Tests` | Unit tests for what `Package.swift` builds |
 
 **Translations** live in `Resources/<language>.lproj/Localizable.strings`. Every key used in the code must exist in
 every language; the build fails otherwise and lists the missing keys. Keys built at run time are listed in
@@ -68,7 +76,7 @@ every language; the build fails otherwise and lists the missing keys. Keys built
 
 1. Fork, branch from `main`, keep the change focused.
 2. Match the surrounding code: comments explain *why*, names say *what*.
-3. Make sure `./build.sh` passes and try the change in the running app.
+3. Make sure `./build.sh` and `make test` pass and try the change in the running app.
 4. Open a pull request describing what changed and how you checked it. Screenshots for anything visual.
 
 By contributing you agree that your work is released under the project's [license](LICENSE) (GPL-3.0).

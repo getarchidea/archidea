@@ -88,7 +88,7 @@ final class SiteControls: NSViewController {
         if AdBlocker.isAvailable {
             let blocker = NSSwitch()
             blocker.controlSize = .small
-            blocker.state = controller?.state.settings.adBlock == true ? .on : .off
+            blocker.state = controller?.settings.adBlock == true ? .on : .off
             blocker.target = self
             blocker.action = #selector(adBlockChanged(_:))
             let count = controller?.runtime.blockedCount(for: tab) ?? 0
@@ -125,7 +125,7 @@ final class SiteControls: NSViewController {
         }
         let fullURL = NSSwitch()
         fullURL.controlSize = .small
-        fullURL.state = controller?.state.settings.showFullURL == true ? .on : .off
+        fullURL.state = controller?.settings.showFullURL == true ? .on : .off
         fullURL.target = self
         fullURL.action = #selector(fullURLChanged(_:))
         footer.append(ControlRow(symbol: "text.alignleft", title: L("site.showFullURL"), control: fullURL))
@@ -228,7 +228,7 @@ final class SiteControls: NSViewController {
         guard let origin, let profile = controller?.profile, let type = sender.identifier?.rawValue,
               let value = sender.selectedItem?.representedObject as? String else { return }
         EngineCall.call("ac_site_settings_set", profile: profile, args: ["origin": origin, "type": type, "value": value]) { reply in
-            Trace.log("site setting \(type)=\(value) for \(origin): \(reply ?? [:])")
+            Trace.log("site setting \(type)=\(value): \(reply ?? [:])")
         }
         if type == "sound" { tab.muted = value == "block" }
     }
@@ -241,7 +241,7 @@ final class SiteControls: NSViewController {
         controller.confirm(host: host, icon: tab.favicon, title: L("site.clearData.title", host), detail: L("site.clearData.text"),
                            confirm: L("site.clearData.confirm")) { [weak tab] in
             EngineCall.call("ac_site_data_clear", profile: profile, args: ["origin": origin]) { reply in
-                Trace.log("cleared site data for \(origin): \(reply ?? [:])")
+                Trace.log("cleared a site's data: \(reply ?? [:])")
                 tab?.reload()
             }
         }
@@ -249,15 +249,15 @@ final class SiteControls: NSViewController {
 
     @objc private func adBlockChanged(_ sender: NSSwitch) {
         guard let controller else { return }
-        controller.state.settings.adBlock = sender.state == .on
-        controller.settingsChanged()
+        let on = sender.state == .on
+        controller.updateSettings { $0.adBlock = on }
         tab.reload()
     }
 
     @objc private func fullURLChanged(_ sender: NSSwitch) {
         guard let controller else { return }
-        controller.state.settings.showFullURL = sender.state == .on
-        controller.settingsChanged()
+        let on = sender.state == .on
+        controller.updateSettings { $0.showFullURL = on }
     }
 }
 

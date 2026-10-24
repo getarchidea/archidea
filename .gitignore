@@ -1,5 +1,7 @@
 # Build output and fetched dependencies
 /build/
+/.build/
+/.swiftpm/
 /vendor/engine/Chromium Framework.framework/
 /vendor/engine/.fetch-*
 /vendor/ublock/

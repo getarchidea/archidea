@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let engine = ArdiaCoreEngine.shared else { return }
         engine.offTheRecordProfile(for: engine.defaultProfile) { [weak self] profile, error in
             guard let self, let profile else { return Trace.log("private window: \(error ?? "no profile")") }
-            let controller = BrowserWindowController(store: Store(ephemeral: .privateWindow()), profile: profile)
+            let controller = BrowserWindowController(store: Store(ephemeral: .privateWindow()), profile: profile, preferences: store)
             privateWindows.append(controller)
             controller.showWindow()
         }
@@ -54,6 +54,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func privateWindowClosed(_ controller: BrowserWindowController) {
         privateWindows.removeAll { $0 === controller }
+    }
+
+    /// The browser-wide settings changed: every window takes them up.
+    func settingsChanged() {
+        windowController?.settingsChanged()
+        privateWindows.forEach { $0.settingsChanged() }
     }
 
     func start() {
@@ -162,8 +168,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.switchSpace(to: space)
     }
 
+    /// Links, and files opened with Archidea: a web page, or a saved link (.webloc), which opens the address in it.
     func application(_ application: NSApplication, open urls: [URL]) {
-        urls.forEach(IncomingLinks.receive)
+        for url in urls {
+            if url.isFileURL, url.pathExtension.lowercased() == "webloc",
+               let data = try? Data(contentsOf: url),
+               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+               let address = (plist["URL"] as? String).flatMap(URL.init(string:)) {
+                IncomingLinks.receive(address)
+            } else {
+                IncomingLinks.receive(url)
+            }
+        }
     }
 
     /// A link from another app: a mini window of its own, or (as Settings say) a new tab in the browser window.
@@ -174,7 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.openInNewTab(url.absoluteString)
             return
         }
-        if controller.state.settings.linksInMiniWindow, let engine = ArdiaCoreEngine.shared {
+        if controller.settings.linksInMiniWindow, let engine = ArdiaCoreEngine.shared {
             let mini = MiniWindowController(url: url.absoluteString, profile: engine.defaultProfile,
                                             cascadeFrom: miniWindows.last?.window) { [weak self] closed in
                 self?.miniWindows.removeAll { $0 === closed }
@@ -258,7 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController?.showNotice(L("update.notConfigured"), detail: L("update.version", updater.currentVersion))
             return
         }
-        if case .ready = updater.state { return updater.installNow() }
+        if case .ready = updater.state { return installUpdate() }
         updater.checkNow { [weak self] state in
             switch state {
             case .upToDate:
@@ -268,10 +284,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case let .downloading(version):
                 self?.windowController?.showNotice(L("update.downloading", version), detail: L("update.downloading.detail"))
             case .ready:
-                updater.installNow()
+                self?.installUpdate()
             default: break
             }
         }
+    }
+
+    /// Restarts into the downloaded update, or says why it can't go in where the app is.
+    func installUpdate() {
+        guard case .ready = Updater.shared.state, !Updater.shared.installNow() else { return }
+        windowController?.showNotice(L("update.cantInstall"), detail: L("update.cantInstall.detail"))
     }
     @objc func reopenClosedTab(_ sender: Any?) { current?.reopenClosedTab() }
     @objc func importData(_ sender: Any?) { ImportWindowController.shared.show() }

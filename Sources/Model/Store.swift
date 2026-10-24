@@ -26,6 +26,8 @@ enum Paths {
 final class Store {
     let state: AppState
     private var pendingSave: DispatchWorkItem?
+    /// Writes happen here, in order, so the main thread only pays for encoding; quitting waits for the last one.
+    private let writer = DispatchQueue(label: "app.archidea.state-writer", qos: .utility)
     /// False for a private window: its sidebar and favicons stay in memory and are gone when it closes.
     let persists: Bool
 
@@ -39,7 +41,9 @@ final class Store {
         persists = true
         Paths.prepare()
         state = Self.load()
+        if state.repair() { Trace.log("state: repaired what the saved sidebar got wrong") }
         archiveStaleTabs()
+        sweepFavicons()
     }
 
     /// The saved sidebar. A file that doesn't read back (cut short, from a newer version) is never written over:
@@ -71,38 +75,71 @@ final class Store {
         return AppState()
     }
 
+    /// At launch nothing is open yet, so every stale Today tab simply goes (onto the reopen list, as when the window
+    /// archives them while running, keeping the one in front and those playing sound).
     private func archiveStaleTabs() {
         let hours = state.settings.archiveHours
         guard hours > 0 else { return }
         let cutoff = Date().addingTimeInterval(-Double(hours) * 60 * 60)
         for space in state.spaces {
-            space.today.removeAll { $0.lastActive < cutoff }
+            let stale = space.staleToday(before: cutoff)
+            stale.forEach(state.remember)
+            space.today.removeAll { item in stale.contains { $0 === item } }
             if let selected = space.selectedID, space.find(selected) == nil { space.selectedID = nil }
         }
     }
 
+    /// Saves a moment later, once a burst of changes is over.
     func setNeedsSave() {
         guard persists else { return }
         pendingSave?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.saveNow() }
+        let work = DispatchWorkItem { [weak self] in self?.save(waiting: false) }
         pendingSave = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
-    func saveNow() {
+    /// Saves before returning (quitting, closing the window).
+    func saveNow() { save(waiting: true) }
+
+    /// The sidebar is encoded here, on the main thread that changes it, so the file is always one consistent moment;
+    /// writing it out happens on `writer`.
+    private func save(waiting: Bool) {
         pendingSave?.cancel()
         pendingSave = nil
         guard persists else { return }
+        let data: Data
         do {
-            try JSONEncoder.drift.encode(state).write(to: Paths.state, options: .atomic)
+            data = try JSONEncoder.drift.encode(state)
         } catch {
-            Trace.log("state: not saved (\(error))")
+            return Trace.log("state: not encoded (\(error))")
         }
+        let write = {
+            do {
+                try data.write(to: Paths.state, options: .atomic)
+            } catch {
+                Trace.log("state: not saved (\(error))")
+            }
+        }
+        if waiting { writer.sync(execute: write) } else { writer.async(execute: write) }
     }
 
     // MARK: favicons survive restarts, so unloaded pins keep their icons
 
     private var faviconCache: [UUID: NSImage] = [:]
+
+    /// Icons of items that are gone (closed, removed, archived) go once at launch; nothing else ever asks for them.
+    private func sweepFavicons() {
+        let kept = Set(state.spaces.flatMap(\.allTabs).map(\.id.uuidString))
+        writer.async {
+            let fm = FileManager.default
+            guard let files = try? fm.contentsOfDirectory(at: Paths.favicons, includingPropertiesForKeys: nil) else { return }
+            var removed = 0
+            for file in files where file.pathExtension == "png" && !kept.contains(file.deletingPathExtension().lastPathComponent) {
+                if (try? fm.removeItem(at: file)) != nil { removed += 1 }
+            }
+            if removed > 0 { Trace.log("favicons: \(removed) icons of items that are gone removed") }
+        }
+    }
 
     func favicon(for item: SidebarItem) -> NSImage? {
         if let cached = faviconCache[item.id] { return cached }
@@ -129,14 +166,15 @@ final class Store {
         image.draw(in: NSRect(x: 0, y: 0, width: 16, height: 16))
         NSGraphicsContext.restoreGraphicsState()
         guard let png = bitmap.representation(using: .png, properties: [:]) else { return }
-        DispatchQueue.global(qos: .utility).async { try? png.write(to: url, options: .atomic) }
+        writer.async { try? png.write(to: url, options: .atomic) }
     }
 }
 
 extension JSONEncoder {
     static let drift: JSONEncoder = {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        // Compact: the whole sidebar is written after every change, and a big import makes it large.
+        encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }()
