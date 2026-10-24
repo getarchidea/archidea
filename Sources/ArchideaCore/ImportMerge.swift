@@ -1,11 +1,12 @@
 import Foundation
 
 extension AppState {
-    /// Imported spaces join the sidebar (one with the same name takes them in); open tabs go to the current Today.
-    /// An untouched starting space is dropped when real ones arrive. Folders only ever land among the pins, wherever
-    /// the other browser had them. `symbolExists` says whether an SF Symbol is on this Mac.
-    public func adopt(imported: [ImportedSpace], openTabs: [ImportedNode],
-               symbolExists: (String) -> Bool) -> (spaces: Int, pins: Int, tabs: Int) {
+    /// Imported spaces join the sidebar (one with the same name takes them in); open tabs go to the Today of
+    /// `current`, the space the importing window shows. An untouched starting space is dropped when real ones
+    /// arrive. Folders only ever land among the pins, wherever the other browser had them. `symbolExists` says
+    /// whether an SF Symbol is on this Mac.
+    public func adopt(imported: [ImportedSpace], openTabs: [ImportedNode], into current: Space,
+                      symbolExists: (String) -> Bool) -> (spaces: Int, pins: Int, tabs: Int) {
         var counts = (spaces: 0, pins: 0, tabs: 0)
         func symbolIfReal(_ name: String?) -> String? {
             name.flatMap { symbolExists($0) ? $0 : nil }
@@ -25,7 +26,7 @@ extension AppState {
                 return folder
             }
         }
-        let starting = currentSpace
+        let starting = current
         let untouched = spaces.count == 1 && starting.pinned.isEmpty && starting.today.isEmpty
         for incoming in imported where !(incoming.pinned.isEmpty && incoming.tabs.isEmpty) {
             let target: Space
@@ -44,10 +45,9 @@ extension AppState {
             counts.tabs += Self.merge(tabs.filter { !$0.isFolder }, into: &target.today)
         }
         if untouched, counts.spaces > 0, starting.pinned.isEmpty, starting.today.isEmpty, openTabs.isEmpty {
-            spaces.removeAll { $0 === starting }
-            currentSpaceID = spaces[0].id
+            removeSpace(starting)
         }
-        let current = currentSpace
+        let current = spaces.contains { $0 === starting } ? starting : spaces[0]
         let open = openTabs.compactMap { item($0, pinned: false) }
         counts.pins += Self.merge(open.filter(\.isFolder), into: &current.pinned)
         var fresh: [SidebarItem] = []

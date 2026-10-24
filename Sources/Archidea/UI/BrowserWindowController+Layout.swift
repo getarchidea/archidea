@@ -6,7 +6,7 @@ extension BrowserWindowController {
     // MARK: sidebar modes: docked, hidden, or slid out over the page
 
     func applySidebarMode(animated: Bool, duration: TimeInterval = 0.22) {
-        let mode: RootView.SidebarMode = !state.sidebarHidden ? .docked : overlayShown ? .overlay : .hidden
+        let mode: RootView.SidebarMode = !windowState.sidebarHidden ? .docked : overlayShown ? .overlay : .hidden
         root.mode = mode
         root.contentFullscreen = contentFullscreen
         let fullscreen = window.styleMask.contains(.fullScreen)
@@ -19,14 +19,14 @@ extension BrowserWindowController {
 
     /// Whether a press at this window point lands on the sidebar while it's on screen, docked or slid out.
     func sidebarTakesPress(at point: NSPoint) -> Bool {
-        guard !contentFullscreen, !state.sidebarHidden || overlayShown else { return false }
+        guard !contentFullscreen, !windowState.sidebarHidden || overlayShown else { return false }
         return sidebar.frame.contains(root.convert(point, from: nil))
     }
 
     func setOverlay(_ shown: Bool) {
         overlayHide?.cancel()
         overlayHide = nil
-        guard overlayShown != shown, state.sidebarHidden else { return }
+        guard overlayShown != shown, windowState.sidebarHidden else { return }
         overlayShown = shown
         applySidebarMode(animated: true)
     }
@@ -40,7 +40,7 @@ extension BrowserWindowController {
     }
 
     func trackPointer(_ event: NSEvent) {
-        guard event.window === window, state.sidebarHidden, !contentFullscreen, !root.isResizing else { return }
+        guard event.window === window, windowState.sidebarHidden, !contentFullscreen, !root.isResizing else { return }
         let point = root.convert(event.locationInWindow, from: nil)
         if !overlayShown {
             if point.x <= 6, point.y > 0, point.y < root.bounds.height { setOverlay(true) }
@@ -63,11 +63,11 @@ extension BrowserWindowController {
     }
 
     func toggleSidebar() {
-        if state.sidebarHidden, overlayShown {
-            state.sidebarHidden = false
+        if windowState.sidebarHidden, overlayShown {
+            windowState.sidebarHidden = false
             overlayShown = false
         } else {
-            state.sidebarHidden.toggle()
+            windowState.sidebarHidden.toggle()
             overlayShown = false
         }
         applySidebarMode(animated: true)
@@ -80,7 +80,7 @@ extension BrowserWindowController {
         if let color { target.colorHex = color }
         if let symbol { target.symbol = symbol }
         if target === space { applyTheme(of: target) }
-        sidebar.reload()
+        reloadSidebar()
         store.setNeedsSave()
     }
 
@@ -94,20 +94,28 @@ extension BrowserWindowController {
         root.tint = tint
         sidebar.tint = tint
         // On our root view, not the window: Chrome owns the window and applies its appearance on its own schedule.
+        // The app's own appearance (which the pages follow too) is the window in front's.
+        let setsApp = !isPrivate && (window.isKeyWindow || group.front === self)
         let dark: Bool
         switch target.appearance ?? .system {
         case .system:
-            root.appearance = nil
-            if !isPrivate { NSApp.appearance = nil }
-            dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            if setsApp {
+                root.appearance = nil
+                NSApp.appearance = nil
+                dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            } else {
+                // Behind another window, whose space may have set the app light or dark: the system's own look.
+                dark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+                root.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            }
         case .light:
             root.appearance = NSAppearance(named: .aqua)
-            if !isPrivate { NSApp.appearance = NSAppearance(named: .aqua) }
+            if setsApp { NSApp.appearance = NSAppearance(named: .aqua) }
             dark = false
         case .dark:
             root.appearance = NSAppearance(named: .darkAqua)
-            // A private window is always dark; it leaves the app's (and the main window's pages') look alone.
-            if !isPrivate { NSApp.appearance = NSAppearance(named: .darkAqua) }
+            // A private window is always dark; it leaves the app's (and the other windows' pages') look alone.
+            if setsApp { NSApp.appearance = NSAppearance(named: .darkAqua) }
             dark = true
         }
         // Chromium follows the app's appearance for pages' prefers-color-scheme, so sites switch with the space.
@@ -125,7 +133,7 @@ extension BrowserWindowController {
             target.tintStrength = Double(theme.strength)
             target.appearance = theme.appearance == .system ? nil : theme.appearance
             if target === space { applyTheme(of: target) }
-            sidebar.reload()
+            reloadSidebar()
             store.setNeedsSave()
         }
         editor.present(relativeTo: view.bounds, of: view, edge: .maxX)

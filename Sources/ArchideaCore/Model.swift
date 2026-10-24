@@ -92,7 +92,6 @@ public final class Space: Codable {
     public var appearance: Appearance?
     public var pinned: [SidebarItem]
     public var today: [SidebarItem]
-    public var selectedID: UUID?
 
     public init(name: String, symbol: String, colorHex: String) {
         id = UUID()
@@ -104,7 +103,7 @@ public final class Space: Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, symbol, colorHex, tintStrength, appearance, pinned, today, selectedID
+        case id, name, symbol, colorHex, tintStrength, appearance, pinned, today
     }
 
     public init(from decoder: Decoder) throws {
@@ -117,7 +116,6 @@ public final class Space: Codable {
         appearance = try? c.decodeIfPresent(Appearance.self, forKey: .appearance)
         pinned = try c.decodeIfPresent([SidebarItem].self, forKey: .pinned) ?? []
         today = try c.decodeIfPresent([SidebarItem].self, forKey: .today) ?? []
-        selectedID = try? c.decodeIfPresent(UUID.self, forKey: .selectedID)
     }
 
     public var allTabs: [SidebarItem] { pinned.flatMap(\.allTabs) + today.flatMap(\.allTabs) }
@@ -235,8 +233,9 @@ public struct ClosedTab: Codable, Equatable {
 
 public final class AppState: Codable {
     /// The layout of state.json. Raised when a change needs more than new fields with defaults, so a migration
-    /// can tell an old file from a new one.
-    public static let schemaVersion = 1
+    /// can tell an old file from a new one. 2: each window's view (`windows`) instead of one current space and
+    /// one selected tab per space.
+    public static let schemaVersion = 2
     /// How many closed tabs ⇧⌘T can bring back.
     public static let closedLimit = 50
 
@@ -253,9 +252,9 @@ public final class AppState: Codable {
 
     public private(set) var version = AppState.schemaVersion
     public var spaces: [Space]
-    public var currentSpaceID: UUID
+    /// What each browser window shows, the one opened first first. There is always at least one.
+    public var windows: [WindowState]
     public var sidebarWidth: Double
-    public var sidebarHidden: Bool
     /// Newest last.
     public var recentlyClosed: [ClosedTab] = []
     private var storedSettings: BrowserSettings?
@@ -268,31 +267,58 @@ public final class AppState: Codable {
     public init() {
         let home = Space(name: "Home", symbol: "house", colorHex: "#7C8CF8")
         spaces = [home]
-        currentSpaceID = home.id
+        windows = [WindowState(spaceID: home.id)]
         sidebarWidth = 248
-        sidebarHidden = false
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, spaces, currentSpaceID, sidebarWidth, sidebarHidden, recentlyClosed, storedSettings
+        case version, spaces, windows, sidebarWidth, recentlyClosed, storedSettings
     }
+
+    /// What version 1 kept of its one window: the current space, the sidebar hidden or not, each space's tab in front.
+    private enum LegacyKeys: String, CodingKey { case currentSpaceID, sidebarHidden, spaces }
+    private struct LegacySpace: Decodable { let id: UUID?, selectedID: UUID? }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        // Files from before the version was written are version 0; nothing needs migrating from it yet.
+        // Files from before the version was written are version 0; they read like version 1.
         _ = try? c.decodeIfPresent(Int.self, forKey: .version)
         version = Self.schemaVersion
         spaces = try c.decodeIfPresent([Space].self, forKey: .spaces) ?? []
-        currentSpaceID = (try? c.decodeIfPresent(UUID.self, forKey: .currentSpaceID)) ?? spaces.first?.id ?? UUID()
+        // The windows only say how the sidebar was looked at: a list that doesn't read costs that, not the sidebar.
+        windows = (try? c.decodeIfPresent([WindowState].self, forKey: .windows)) ?? []
+        if windows.isEmpty {
+            // Version 1 had one window, and kept what it showed with the sidebar itself.
+            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+            let window = WindowState(spaceID: (try? legacy.decodeIfPresent(UUID.self, forKey: .currentSpaceID)) ?? spaces.first?.id ?? UUID(),
+                                     sidebarHidden: (try? legacy.decodeIfPresent(Bool.self, forKey: .sidebarHidden)) ?? false)
+            for old in (try? legacy.decodeIfPresent([LegacySpace].self, forKey: .spaces)) ?? [] {
+                guard let id = old.id, let selected = old.selectedID, let space = spaces.first(where: { $0.id == id }) else { continue }
+                window.select(selected, in: space)
+            }
+            windows = [window]
+        }
         sidebarWidth = (try? c.decodeIfPresent(Double.self, forKey: .sidebarWidth)) ?? 248
-        sidebarHidden = (try? c.decodeIfPresent(Bool.self, forKey: .sidebarHidden)) ?? false
         // Only a convenience: a list that doesn't read is dropped rather than costing the sidebar.
         recentlyClosed = (try? c.decodeIfPresent([ClosedTab].self, forKey: .recentlyClosed)) ?? []
         storedSettings = try? c.decodeIfPresent(BrowserSettings.self, forKey: .storedSettings)
     }
 
-    public var currentSpace: Space {
-        spaces.first { $0.id == currentSpaceID } ?? spaces[0]
+    /// The space `window` shows.
+    public func space(shownIn window: WindowState) -> Space {
+        spaces.first { $0.id == window.spaceID } ?? spaces[0]
+    }
+
+    /// Whether some window has `item` in front in `space`: a tab like that isn't archived.
+    public func isInFront(_ item: SidebarItem, in space: Space) -> Bool {
+        windows.contains { $0.selectedID(in: space) == item.id }
+    }
+
+    /// Takes a space out, unless it's the last one; windows that showed it show the first space left.
+    public func removeSpace(_ space: Space) {
+        guard spaces.count > 1, spaces.contains(where: { $0 === space }) else { return }
+        spaces.removeAll { $0 === space }
+        for window in windows where window.spaceID == space.id { window.spaceID = spaces[0].id }
     }
 
     public func space(containing item: SidebarItem) -> Space? {
@@ -300,8 +326,8 @@ public final class AppState: Codable {
     }
 
     /// Puts right what an older version (or a bug) may have saved: a folder in Today goes back among the pins, a
-    /// pinned tab gets its home address, a Today tab loses one, the current space is one that exists.
-    /// Returns whether anything changed.
+    /// pinned tab gets its home address, a Today tab loses one, every window shows a space that exists and there is
+    /// a window. Returns whether anything changed.
     @discardableResult
     public func repair() -> Bool {
         var changed = false
@@ -321,8 +347,13 @@ public final class AppState: Codable {
                 changed = true
             }
         }
-        if !spaces.contains(where: { $0.id == currentSpaceID }), let first = spaces.first {
-            currentSpaceID = first.id
+        guard let first = spaces.first else { return changed }
+        if windows.isEmpty {
+            windows = [WindowState(spaceID: first.id)]
+            changed = true
+        }
+        for window in windows where !spaces.contains(where: { $0.id == window.spaceID }) {
+            window.spaceID = first.id
             changed = true
         }
         return changed
@@ -345,10 +376,11 @@ public final class AppState: Codable {
     }
 
     /// Brings the newest closed tab back: a pin to its place (the end of the pins when its folder has gone), anything
-    /// else to the top of Today, in its own space while that exists. Returns the new item and the space it went to.
-    public func reopenLastClosed() -> (item: SidebarItem, space: Space)? {
+    /// else to the top of Today, in its own space while that exists, else in `fallback`. Returns the new item and
+    /// the space it went to.
+    public func reopenLastClosed(fallback: Space) -> (item: SidebarItem, space: Space)? {
         guard let last = recentlyClosed.popLast() else { return nil }
-        let owner = spaces.first { $0.id == last.spaceID } ?? currentSpace
+        let owner = spaces.first { $0.id == last.spaceID } ?? fallback
         let item = SidebarItem(tab: last.url, title: last.title)
         item.customTitle = last.customTitle
         if let home = last.pinnedURL {

@@ -76,8 +76,8 @@ final class Store {
         return AppState()
     }
 
-    /// At launch nothing is open yet, so every stale Today tab simply goes (onto the reopen list, as when the window
-    /// archives them while running, keeping the one in front and those playing sound).
+    /// At launch nothing is open yet, so every stale Today tab simply goes (onto the reopen list, as when the windows
+    /// archive them while running, keeping the ones in front and those playing sound).
     private func archiveStaleTabs() {
         let hours = state.settings.archiveHours
         guard hours > 0 else { return }
@@ -86,7 +86,6 @@ final class Store {
             let stale = space.staleToday(before: cutoff)
             stale.forEach(state.remember)
             space.today.removeAll { item in stale.contains { $0 === item } }
-            if let selected = space.selectedID, space.find(selected) == nil { space.selectedID = nil }
         }
     }
 

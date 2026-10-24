@@ -4,11 +4,18 @@ import ArdiaCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = Store()
-    private(set) var windowController: BrowserWindowController?
-    /// Open private windows; each has its own off-the-record profile.
-    private var privateWindows: [BrowserWindowController] = []
+    /// The normal windows, which share the saved sidebar.
+    private(set) lazy var browser = WindowGroup(store: store)
+    /// Open private windows, each a group of its own: an off-the-record profile and a sidebar kept only in memory.
+    private var privateGroups: [WindowGroup] = []
     /// Mini windows holding links from other apps.
     private var miniWindows: [MiniWindowController] = []
+
+    /// The normal window used last: links from other apps, the Dock, import and the app's notices go there.
+    var windowController: BrowserWindowController? { browser.front }
+
+    /// Every browser window, normal and private.
+    var browserWindows: [BrowserWindowController] { browser.windows + privateGroups.flatMap(\.windows) }
 
     #if DRIFT_DEV
     var debugMiniWindows: [MiniWindowController] { miniWindows }
@@ -17,14 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The mini window in front, when it is: page commands (reload, back, ⌘W…) go to its page.
     private var keyMini: MiniWindowController? { miniWindows.first { $0.window.isKeyWindow } }
 
-    /// The browser window commands go to: the key one, else the main window.
+    /// The browser window commands go to: the key one, else the main one, else the normal window used last.
     var current: BrowserWindowController? {
-        privateWindows.first { $0.window.isKeyWindow || $0.window.isMainWindow } ?? windowController
+        let windows = browserWindows
+        return windows.first { $0.window.isKeyWindow } ?? windows.first { $0.window.isMainWindow } ?? windowController
     }
 
     /// The window a tab lives in, for the engine's requests about it.
     func controller(for tab: ArdiaCoreTab) -> BrowserWindowController? {
-        privateWindows.first { $0.owns(tab) } ?? windowController
+        browserWindows.first { $0.owns(tab) } ?? windowController
     }
 
     /// A permission request for a page in a mini window goes to that window's card; false when it's not one.
@@ -34,34 +42,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// The window holding `profile`'s tabs when the engine opens a new one there (a link, a popup).
+    /// The window holding `profile`'s tabs when the engine opens a new one there (a link, a popup): for the normal
+    /// profile, the normal window in front.
     func controller(for profile: ArdiaCoreProfile) -> BrowserWindowController? {
-        privateWindows.first { $0.profile === profile } ?? windowController
+        if profile.offTheRecord, let own = privateGroups.flatMap(\.windows).first(where: { $0.profile === profile }) { return own }
+        return browser.windows.first { $0.window.isKeyWindow || $0.window.isMainWindow } ?? windowController
+    }
+
+    /// ⌘N: another window on the same sidebar, showing the space the window in front shows. With every window closed
+    /// the last one was only put away, and it comes back instead.
+    @objc func newWindow(_ sender: Any?) {
+        guard let engine = ArdiaCoreEngine.shared, OnboardingWindowController.shared.window?.isVisible != true else { return }
+        if browser.windows.allSatisfy({ !$0.window.isVisible && !$0.window.isMiniaturized }), let away = windowController {
+            away.showWindow()
+            NSApp.activate()
+            return
+        }
+        let from = windowController
+        let view = WindowState(spaceID: (from?.space ?? store.state.spaces[0]).id, sidebarHidden: from?.windowState.sidebarHidden ?? false)
+        store.state.windows.append(view)
+        let controller = BrowserWindowController(group: browser, profile: engine.defaultProfile, windowState: view)
+        if let from, from.window.isVisible { controller.cascade(from: from.window) }
+        controller.showWindow()
+        store.setNeedsSave()
     }
 
     @objc func newPrivateWindow(_ sender: Any?) {
         guard let engine = ArdiaCoreEngine.shared else { return }
         engine.offTheRecordProfile(for: engine.defaultProfile) { [weak self] profile, error in
             guard let self, let profile else { return Trace.log("private window: \(error ?? "no profile")") }
-            let controller = BrowserWindowController(store: Store(ephemeral: .privateWindow()), profile: profile, preferences: store)
-            privateWindows.append(controller)
+            let group = WindowGroup(store: Store(ephemeral: .privateWindow()))
+            let controller = BrowserWindowController(group: group, profile: profile, windowState: group.store.state.windows[0],
+                                                     preferences: store)
+            privateGroups.append(group)
             controller.showWindow()
         }
     }
 
-    func privateDismiss(_ requestId: String) {
-        privateWindows.forEach { $0.dismissPermissionRequest(requestId) }
+    /// The engine took back a permission request: whichever window or mini window shows it lets it go.
+    func dismissPermissionRequest(_ requestId: String) {
+        browserWindows.forEach { $0.dismissPermissionRequest(requestId) }
         miniWindows.forEach { $0.dismissPermissionRequest(requestId) }
     }
 
-    func privateWindowClosed(_ controller: BrowserWindowController) {
-        privateWindows.removeAll { $0 === controller }
+    /// A window closed for good (a private one, or a normal one while another stays).
+    func windowClosed(_ controller: BrowserWindowController) {
+        privateGroups.removeAll { $0 === controller.group }
     }
 
     /// The browser-wide settings changed: every window takes them up.
     func settingsChanged() {
-        windowController?.settingsChanged()
-        privateWindows.forEach { $0.settingsChanged() }
+        browserWindows.forEach { $0.settingsChanged() }
+    }
+
+    /// The windows as they are, for the next launch: where each is, the one in front last.
+    func rememberWindows() {
+        browser.windows.forEach { $0.rememberFrame() }
+        let order = NSApp.orderedWindows
+        let rank = { (controller: BrowserWindowController) in order.firstIndex(of: controller.window) ?? .max }
+        store.state.windows = browser.windows.sorted { rank($0) > rank($1) }.map(\.windowState)
     }
 
     func start() {
@@ -73,21 +112,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Downloads.shared.start(profile: engine.defaultProfile)
         Favicons.shared.profile = engine.defaultProfile
         NSApp.mainMenu = Shortcuts.buildMainMenu(target: self)
-        let controller = BrowserWindowController(store: store, profile: engine.defaultProfile)
-        windowController = controller
+        // The windows as they were, the one in front last.
+        let windows = store.state.windows.map { view in
+            BrowserWindowController(group: browser, profile: engine.defaultProfile, windowState: view)
+        }
+        let showAll: () -> Void = {
+            windows.forEach { $0.showWindow() }
+            NSApp.activate(ignoringOtherApps: true)
+        }
         if OnboardingWindowController.isNeeded {
             // The first launch is the welcome window alone; the browser comes up once the user is through it.
-            OnboardingWindowController.shared.onFinish = { [weak controller] in
-                controller?.showWindow()
-                NSApp.activate(ignoringOtherApps: true)
-            }
+            OnboardingWindowController.shared.onFinish = showAll
             OnboardingWindowController.shared.show()
         } else {
-            controller.showWindow()
-            NSApp.activate(ignoringOtherApps: true)
+            showAll()
         }
         IncomingLinks.handler = { [weak self] url in self?.openIncoming(url) }
         #if DRIFT_DEV
+        let controller = windows[0]
         SelfTest.runIfRequested(controller)
         Demo.runIfRequested(controller)
         Repro.runIfRequested(controller)
@@ -135,12 +177,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// The Dock icon's menu: a new tab or private window, and the spaces to jump straight into. macOS adds the open
-    /// windows above and Options / Quit below.
+    /// The Dock icon's menu: a new tab, window or private window, and the spaces to jump straight into (in the window
+    /// used last). macOS adds the open windows above and Options / Quit below.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         guard let controller = windowController, OnboardingWindowController.shared.window?.isVisible != true else { return nil }
         let menu = NSMenu()
         menu.addItem(withTitle: L("menu.newTab"), action: #selector(dockNewTab(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("menu.newWindow"), action: #selector(newWindow(_:)), keyEquivalent: "").target = self
         menu.addItem(withTitle: L("menu.newPrivateWindow"), action: #selector(newPrivateWindow(_:)), keyEquivalent: "").target = self
         let spaces = controller.state.spaces
         if spaces.count > 1 {
@@ -150,7 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 item.target = self
                 item.representedObject = space.id
                 item.image = Glyphs.image(space.symbol, filled: false, pointSize: 13)
-                item.state = space.id == controller.state.currentSpaceID ? .on : .off
+                item.state = space === controller.space ? .on : .off
             }
         }
         return menu
@@ -213,12 +256,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         Trace.log("app: will terminate")
+        rememberWindows()
         store.saveNow()
     }
 
     // MARK: menu actions
 
     @objc func quit(_ sender: Any?) {
+        rememberWindows()
         store.saveNow()
         ArdiaCoreEngine.shared?.quit()
     }
@@ -231,6 +276,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func closeTab(_ sender: Any?) {
         if let mini = keyMini { return mini.window.performClose(sender) }
         current?.closeSelected()
+    }
+    @objc func closeWindow(_ sender: Any?) {
+        if let mini = keyMini { return mini.window.performClose(sender) }
+        current?.window.performClose(sender)
     }
     @objc func togglePin(_ sender: Any?) { current?.togglePinSelected() }
     @objc func newFolder(_ sender: Any?) { current?.newFolder() }

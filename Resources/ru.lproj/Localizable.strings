@@ -37,6 +37,7 @@
 "menu.app" = "Archidea";
 "menu.back" = "Назад";
 "menu.closeTab" = "Закрыть вкладку";
+"menu.closeWindow" = "Закрыть окно";
 "menu.copy" = "Копировать";
 "menu.copyURL" = "Копировать адрес";
 "menu.cut" = "Вырезать";
@@ -349,6 +350,7 @@
 "import.csv.hint" = "Для паролей Apple: откройте приложение «Пароли», выберите Файл › Экспортировать все пароли и укажите файл здесь. Подойдёт и экспорт из 1Password или Bitwarden.";
 "settings.managers.apple" = "Экспортируйте пароли из приложения «Пароли» и перенесите их сюда.";
 "menu.newPrivateWindow" = "Новое приватное окно";
+"menu.newWindow" = "Новое окно";
 "private.space" = "Приватное";
 "menu.help" = "Справка";
 "menu.saveDiagnostics" = "Сохранить журнал диагностики";
@@ -400,6 +402,9 @@
 "update.error.server" = "GitHub вернул обновление с ошибкой. Попробуйте через пару минут.";
 "update.error.damaged" = "Скачанное обновление не прошло проверку, поэтому не установлено. Archidea попробует ещё раз позже.";
 "start.closed" = "Недавно закрытые";
+"elsewhere.title" = "Открыта в другом окне";
+"elsewhere.show" = "Показать окно";
+"elsewhere.move" = "Перенести сюда";
 "start.hide" = "Убрать со стартовой страницы";
 "update.downloading" = "Скачивается Archidea %@";
 "update.downloading.detail" = "Как только загрузится, внизу сайдбара появится кнопка перезапуска.";

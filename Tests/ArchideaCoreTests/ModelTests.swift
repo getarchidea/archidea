@@ -1,6 +1,11 @@
 import XCTest
 @testable import ArchideaCore
 
+extension AppState {
+    /// The first window's space, for tests that look at one window.
+    var currentSpace: Space { space(shownIn: windows[0]) }
+}
+
 final class ModelTests: XCTestCase {
     private func makeSpace() -> Space { Space(name: "Work", symbol: "briefcase", colorHex: "#7C8CF8") }
 
@@ -60,14 +65,55 @@ final class ModelTests: XCTestCase {
         stale.pinnedURL = "https://old.example"
         space.pinned = [homeless]
         space.today = [folder, stale]
-        state.currentSpaceID = UUID()
+        state.windows[0].spaceID = UUID()
         XCTAssertTrue(state.repair())
         XCTAssertEqual(space.today.count, 1)
         XCTAssertTrue(space.pinned.contains { $0 === folder })
         XCTAssertEqual(homeless.pinnedURL, "https://pinned.example")
         XCTAssertNil(stale.pinnedURL)
-        XCTAssertEqual(state.currentSpaceID, space.id)
+        XCTAssertEqual(state.windows[0].spaceID, space.id)
         XCTAssertFalse(state.repair())
+    }
+
+    func testRepairGivesTheSidebarAWindow() {
+        let state = AppState()
+        state.windows = []
+        XCTAssertTrue(state.repair())
+        XCTAssertEqual(state.windows.map(\.spaceID), [state.spaces[0].id])
+    }
+
+    // MARK: windows
+
+    func testEachWindowHasItsOwnTabInFront() {
+        let state = AppState()
+        let space = state.currentSpace
+        let one = SidebarItem(tab: "https://one.example")
+        let two = SidebarItem(tab: "https://two.example")
+        space.today = [one, two]
+        let second = WindowState(spaceID: space.id)
+        state.windows.append(second)
+        state.windows[0].select(one.id, in: space)
+        second.select(two.id, in: space)
+        XCTAssertEqual(state.windows[0].selectedID(in: space), one.id)
+        XCTAssertEqual(second.selectedID(in: space), two.id)
+        XCTAssertTrue(state.isInFront(one, in: space))
+        XCTAssertTrue(state.isInFront(two, in: space))
+        second.select(nil, in: space)
+        XCTAssertFalse(state.isInFront(two, in: space))
+    }
+
+    func testRemovingASpaceMovesItsWindowsAndKeepsTheLastSpace() {
+        let state = AppState()
+        let home = state.currentSpace
+        let work = makeSpace()
+        state.spaces.append(work)
+        let second = WindowState(spaceID: work.id)
+        state.windows.append(second)
+        state.removeSpace(work)
+        XCTAssertEqual(state.spaces.map(\.id), [home.id])
+        XCTAssertEqual(second.spaceID, home.id)
+        state.removeSpace(home)
+        XCTAssertEqual(state.spaces.count, 1)
     }
 
     func testStaleTodayLeavesFoldersRecentTabsAndKeptOnes() {
@@ -96,7 +142,7 @@ final class ModelTests: XCTestCase {
         space.pinned = [folder]
         state.remember(pin)
         space.remove(pin)
-        guard let reopened = state.reopenLastClosed() else { return XCTFail("nothing to reopen") }
+        guard let reopened = state.reopenLastClosed(fallback: space) else { return XCTFail("nothing to reopen") }
         XCTAssertTrue(reopened.space === space)
         XCTAssertTrue(folder.children.last === reopened.item)
         XCTAssertEqual(reopened.item.url, "https://two.example/somewhere")
@@ -112,7 +158,7 @@ final class ModelTests: XCTestCase {
         space.today = [SidebarItem(tab: "https://open.example"), tab]
         state.remember(tab)
         space.remove(tab)
-        let reopened = state.reopenLastClosed()
+        let reopened = state.reopenLastClosed(fallback: space)
         XCTAssertTrue(space.today.first === reopened?.item)
         XCTAssertNil(reopened?.item.pinnedURL)
         XCTAssertEqual(reopened?.item.title, "Closed")
@@ -171,10 +217,11 @@ final class ModelTests: XCTestCase {
         let json = """
         {
           "currentSpaceID": "9B5D3F1C-6C1E-4E9A-9A39-2C6D7C0E5A11",
-          "sidebarHidden": false,
+          "sidebarHidden": true,
           "sidebarWidth": 260,
           "spaces": [{
             "colorHex": "#F28C6B", "id": "9B5D3F1C-6C1E-4E9A-9A39-2C6D7C0E5A11", "name": "Home", "symbol": "house",
+            "selectedID": "0F8B7A4E-3B9F-4E0C-8C52-6A2E1B9D7F33",
             "pinned": [{
               "children": [], "expanded": true, "id": "0F8B7A4E-3B9F-4E0C-8C52-6A2E1B9D7F33", "kind": "tab",
               "lastActive": "2026-01-02T10:00:00Z", "pinnedURL": "https://news.example", "title": "News",
@@ -191,6 +238,11 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(state.currentSpace.pinned.first?.customTitle)
         XCTAssertTrue(state.recentlyClosed.isEmpty)
         XCTAssertEqual(state.version, AppState.schemaVersion)
+        // Its one window: the space it showed, the tab in front there, the sidebar hidden.
+        XCTAssertEqual(state.windows.count, 1)
+        XCTAssertEqual(state.windows[0].spaceID, state.currentSpace.id)
+        XCTAssertEqual(state.windows[0].selectedID(in: state.currentSpace), state.currentSpace.pinned.first?.id)
+        XCTAssertTrue(state.windows[0].sidebarHidden)
         // Settings saved before cookie banners were hidden take the default: on.
         XCTAssertTrue(state.settings.hideCookieBanners)
     }
@@ -205,7 +257,13 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(item?.kind, .folder)
         XCTAssertEqual(item?.children.first?.url, "https://a.example")
         XCTAssertNil(state.currentSpace.appearance)
-        XCTAssertEqual(state.currentSpaceID, state.currentSpace.id)
+        XCTAssertEqual(state.windows.map(\.spaceID), [state.currentSpace.id])
+    }
+
+    func testWindowsThatDontReadGiveWayToOne() throws {
+        let json = #"{"spaces": [{"name": "Home"}], "windows": [{"selected": 5}, 7]}"#
+        let state = try decoder.decode(AppState.self, from: Data(json.utf8))
+        XCTAssertEqual(state.windows.map(\.spaceID), [state.spaces[0].id])
     }
 
     func testADamagedFileStillFails() {
@@ -225,6 +283,10 @@ final class ModelTests: XCTestCase {
         state.currentSpace.today = [SidebarItem(tab: "https://today.example")]
         state.currentSpace.appearance = .dark
         state.remember(state.currentSpace.today[0])
+        state.windows[0].select(pin.id, in: state.currentSpace)
+        let second = WindowState(spaceID: state.currentSpace.id, sidebarHidden: true)
+        second.frame = "{{10, 20}, {900, 700}}"
+        state.windows.append(second)
         var settings = state.settings
         settings.searchEngine = .duckduckgo
         state.settings = settings
@@ -237,5 +299,9 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(space.today.first?.url, "https://today.example")
         XCTAssertEqual(back.recentlyClosed, state.recentlyClosed)
         XCTAssertEqual(back.settings.searchEngine, .duckduckgo)
+        XCTAssertEqual(back.windows.map(\.id), state.windows.map(\.id))
+        XCTAssertEqual(back.windows[0].selectedID(in: space), pin.id)
+        XCTAssertEqual(back.windows[1].sidebarHidden, true)
+        XCTAssertEqual(back.windows[1].frame, "{{10, 20}, {900, 700}}")
     }
 }

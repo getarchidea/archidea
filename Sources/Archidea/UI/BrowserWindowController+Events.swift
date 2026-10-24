@@ -17,7 +17,11 @@ extension BrowserWindowController {
     func runtime(_ runtime: TabRuntime, didUpdate item: SidebarItem, change: TabChange) {
         if change.contains(.favicon), let icon = runtime.liveTab(for: item)?.favicon { store.setFavicon(icon, for: item) }
         sidebar.reloadItem(item)
-        if item === activeItem { sidebar.updateAddress(runtime.liveTab(for: item)) }
+        group.itemChanged(item, by: self)
+        if item === activeItem {
+            sidebar.updateAddress(runtime.liveTab(for: item))
+            if change.contains(.saved) { updateWindowTitle() }
+        }
         if change.contains(.saved) { store.setNeedsSave() }
     }
 
@@ -27,6 +31,7 @@ extension BrowserWindowController {
         owner.today.insert(item, at: 0)
         runtime.bind(tab, to: item)
         if owner === space { sidebar.reload() }
+        group.sidebarChanged(by: self)
         if foreground { select(item, cause: "chrome-new-tab") } else { tab.view.isHidden = true }
         store.setNeedsSave()
     }
@@ -45,11 +50,13 @@ extension BrowserWindowController {
             owner.remove(item)
         }
         if wasActive {
-            owner.selectedID = nil
+            windowState.select(nil, in: owner)
             show(nil)
             if let next = owner.today.first(where: { runtime.liveTab(for: $0) != nil }) { select(next, cause: "tab-closed-neighbor") }
         }
-        sidebar.reload()
+        // Another window waiting for the page shows nothing in its place.
+        group.unload(item)
+        reloadSidebar()
         store.setNeedsSave()
     }
 

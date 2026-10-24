@@ -15,7 +15,10 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     let scroll = ThinScrollView()
 
     private let store: Store
-    private var space: Space { store.state.currentSpace }
+    /// The window's own view of the sidebar: which space it lists, which tab is in front.
+    private let windowState: WindowState
+    private var space: Space { store.state.space(shownIn: windowState) }
+    private var selectedID: UUID? { windowState.selectedID(in: space) }
     private var reflecting = false
     private var renaming: SidebarItem?
     private weak var renameLabel: NSTextField?
@@ -27,8 +30,9 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var foldedForDrag: SidebarItem?
     private var drop: SidebarDrop { SidebarDrop(outline: outline, space: space) }
 
-    init(store: Store) {
+    init(store: Store, window windowState: WindowState) {
         self.store = store
+        self.windowState = windowState
         super.init()
         let column = NSTableColumn(identifier: .init("main"))
         column.resizingMask = .autoresizingMask
@@ -115,13 +119,13 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func reloadItem(_ item: SidebarItem) {
         guard item !== renaming, outline.row(forItem: item) >= 0 else { return }
         outline.reloadItem(item, reloadChildren: false)
-        if let id = space.selectedID, id == item.id { reflectSelection() }
+        if let id = selectedID, id == item.id { reflectSelection() }
     }
 
-    /// The active tab is the model's (`space.selectedID`) and nothing else: the table's own selection is never used,
+    /// The active tab is the window's (`WindowState`) and nothing else: the table's own selection is never used,
     /// so nothing AppKit does with rows (type-select, arrows, reloads, expanding) can switch tabs.
     func reflectSelection() {
-        let active = space.selectedID.flatMap { space.find($0) }
+        let active = selectedID.flatMap { space.find($0) }
         outline.enumerateAvailableRowViews { rowView, row in
             (rowView as? SidebarRowView)?.isActive = active != nil && outline.item(atRow: row) as AnyObject === active
         }
@@ -290,7 +294,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
         let row = SidebarRowView()
         row.hoverable = !((item as? SidebarMarker)?.kind == .divider)
-        row.isActive = (item as? SidebarItem).map { $0.id == space.selectedID } ?? false
+        row.isActive = (item as? SidebarItem).map { $0.id == selectedID } ?? false
         return row
     }
 

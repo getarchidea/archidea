@@ -58,6 +58,7 @@ enum Shortcuts {
         ])
         menu(L("menu.file"), [
             item(L("menu.newTab"), #selector(AppDelegate.newTab), "t", reserve: true),
+            item(L("menu.newWindow"), #selector(AppDelegate.newWindow), "n", reserve: true),
             item(L("menu.newPrivateWindow"), #selector(AppDelegate.newPrivateWindow), "n", [.command, .shift], reserve: true),
             item(L("menu.openLocation"), #selector(AppDelegate.openLocation), "l", reserve: true),
             item(L("menu.newFolder"), #selector(AppDelegate.newFolder), "n", [.command, .option]),
@@ -65,6 +66,7 @@ enum Shortcuts {
             item(L("menu.import"), #selector(AppDelegate.importData), ""),
             .separator(),
             item(L("menu.closeTab"), #selector(AppDelegate.closeTab), "w", reserve: true),
+            item(L("menu.closeWindow"), #selector(AppDelegate.closeWindow), "w", [.command, .shift], reserve: true),
             item(L("menu.reopenClosedTab"), #selector(AppDelegate.reopenClosedTab), "t", [.command, .shift], reserve: true),
             item(L("menu.togglePin"), #selector(AppDelegate.togglePin), "d", reserve: true),
             item(L("menu.copyURL"), #selector(AppDelegate.copyURL), "c", [.command, .shift], reserve: true),
