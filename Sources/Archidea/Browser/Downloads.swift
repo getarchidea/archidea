@@ -5,7 +5,8 @@ import ArdiaCore
 final class Downloads {
     static let shared = Downloads()
 
-    struct Item: Equatable {
+    /// A download as the engine reports it (`ac_downloads_list`, the `downloads.changed` event).
+    struct Item: Equatable, Decodable {
         enum State: String { case downloading, finished, cancelled, failed }
 
         let id: String
@@ -24,22 +25,27 @@ final class Downloads {
         var offTheRecord: Bool
         var started: Date
 
-        init?(_ json: [String: Any]) {
-            guard let id = json["id"] as? String else { return nil }
-            self.id = id
-            url = json["url"] as? String ?? ""
-            path = json["path"] as? String ?? ""
-            let name = json["filename"] as? String ?? ""
+        private enum CodingKeys: String, CodingKey {
+            case id, url, path, filename, state, paused, received, total, speed, dangerous, error, offTheRecord, startTime
+        }
+
+        /// Only the ID must be there; anything else missing (or of a kind this version doesn't know) takes a default.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            url = (try? c.decodeIfPresent(String.self, forKey: .url)) ?? ""
+            path = (try? c.decodeIfPresent(String.self, forKey: .path)) ?? ""
+            let name = (try? c.decodeIfPresent(String.self, forKey: .filename)) ?? ""
             filename = name.isEmpty ? (path as NSString).lastPathComponent : name
-            state = State(rawValue: json["state"] as? String ?? "") ?? .downloading
-            paused = json["paused"] as? Bool ?? false
-            received = json["received"] as? Double ?? 0
-            total = json["total"] as? Double ?? -1
-            speed = json["speed"] as? Double ?? 0
-            dangerous = json["dangerous"] as? Bool ?? false
-            error = json["error"] as? String
-            offTheRecord = json["offTheRecord"] as? Bool ?? false
-            started = Date(timeIntervalSince1970: (json["startTime"] as? Double ?? 0) / 1000)
+            state = ((try? c.decodeIfPresent(String.self, forKey: .state)) ?? nil).flatMap(State.init(rawValue:)) ?? .downloading
+            paused = (try? c.decodeIfPresent(Bool.self, forKey: .paused)) ?? false
+            received = (try? c.decodeIfPresent(Double.self, forKey: .received)) ?? 0
+            total = (try? c.decodeIfPresent(Double.self, forKey: .total)) ?? -1
+            speed = (try? c.decodeIfPresent(Double.self, forKey: .speed)) ?? 0
+            dangerous = (try? c.decodeIfPresent(Bool.self, forKey: .dangerous)) ?? false
+            error = try? c.decodeIfPresent(String.self, forKey: .error)
+            offTheRecord = (try? c.decodeIfPresent(Bool.self, forKey: .offTheRecord)) ?? false
+            started = Date(timeIntervalSince1970: ((try? c.decodeIfPresent(Double.self, forKey: .startTime)) ?? 0) / 1000)
         }
 
         var active: Bool { state == .downloading }
@@ -58,20 +64,26 @@ final class Downloads {
 
     func start(profile: ArdiaCoreProfile) {
         self.profile = profile
-        EngineEvents.on("downloads.changed") { [weak self] payload in
-            guard let json = payload["download"] as? [String: Any], let item = Item(json) else { return }
-            self?.upsert(item)
+        struct Changed: Decodable { let download: Item }
+        struct Removed: Decodable { let id: String }
+        EngineEvents.on("downloads.changed", as: Changed.self) { [weak self] payload in
+            self?.upsert(payload.download)
         }
-        EngineEvents.on("downloads.removed") { [weak self] payload in
-            guard let self, let id = payload["id"] as? String else { return }
-            items.removeAll { $0.id == id }
+        EngineEvents.on("downloads.removed", as: Removed.self) { [weak self] payload in
+            guard let self else { return }
+            items.removeAll { $0.id == payload.id }
             changed()
         }
         // The engine starts watching a profile's downloads with its first downloads call.
-        EngineCall.call("ac_downloads_list", profile: profile) { [weak self] reply in
-            guard let self, let list = reply?["downloads"] as? [[String: Any]] else { return }
-            items = list.compactMap(Item.init).filter { !$0.offTheRecord }
-            changed()
+        profile.services.downloads { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case let .success(list):
+                items = list.filter { !$0.offTheRecord }
+                changed()
+            case let .failure(failure):
+                Trace.log("downloads: list \(failure)")
+            }
         }
     }
 
@@ -91,13 +103,13 @@ final class Downloads {
 
     // MARK: actions
 
-    func pause(_ item: Item) { act("ac_downloads_pause", item) }
-    func resume(_ item: Item) { act("ac_downloads_resume", item) }
-    func cancel(_ item: Item) { act("ac_downloads_cancel", item) }
+    func pause(_ item: Item) { act(.pause, item) }
+    func resume(_ item: Item) { act(.resume, item) }
+    func cancel(_ item: Item) { act(.cancel, item) }
     /// Keeps a download Chrome flagged as dangerous or insecure.
-    func keep(_ item: Item) { act("ac_downloads_keep", item) }
+    func keep(_ item: Item) { act(.keep, item) }
     /// Takes a finished, failed or cancelled download off the list; the file stays where it is.
-    func remove(_ item: Item) { act("ac_downloads_remove", item) }
+    func remove(_ item: Item) { act(.remove, item) }
 
     func clearDone() {
         for item in items where !item.active { remove(item) }
@@ -125,10 +137,10 @@ final class Downloads {
 
     // MARK: private
 
-    private func act(_ call: String, _ item: Item) {
+    private func act(_ action: EngineServices.DownloadAction, _ item: Item) {
         guard let profile else { return }
-        EngineCall.call(call, profile: profile, args: ["id": item.id]) { reply in
-            if let error = reply?["error"] { Trace.log("downloads: \(call) \(error)") }
+        profile.services.download(item.id, action) { result in
+            if case let .failure(failure) = result { Trace.log("downloads: \(action) \(failure)") }
         }
     }
 
