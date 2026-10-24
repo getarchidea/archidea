@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-24
+
 - **Mini window**: a link from another app (a chat, a mail) opens in a small window of its own instead of piling
   up in your sidebar. *Open in Archidea* moves the page into the browser window as it is — scroll position,
   sign-in and all; closing the window lets it go. Settings › General › Links from other apps switches back to
