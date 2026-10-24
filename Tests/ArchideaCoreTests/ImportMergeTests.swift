@@ -14,7 +14,7 @@ final class ImportMergeTests: XCTestCase {
 
     func testAnUntouchedStartingSpaceMakesWayForImportedOnes() {
         let state = AppState()
-        let counts = state.adopt(imported: arc(), openTabs: [], symbolExists: anySymbol)
+        let counts = state.adopt(imported: arc(), openTabs: [], into: state.currentSpace, symbolExists: anySymbol)
         XCTAssertEqual(counts.spaces, 1)
         XCTAssertEqual(counts.pins, 2)
         XCTAssertEqual(counts.tabs, 1)
@@ -27,10 +27,19 @@ final class ImportMergeTests: XCTestCase {
         XCTAssertNil(state.currentSpace.today.first?.pinnedURL)
     }
 
+    func testWindowsOnTheDroppedStartingSpaceShowTheImportedOne() {
+        let state = AppState()
+        let starting = state.currentSpace
+        let second = WindowState(spaceID: starting.id)
+        state.windows.append(second)
+        _ = state.adopt(imported: arc(), openTabs: [], into: starting, symbolExists: anySymbol)
+        XCTAssertEqual(state.windows.map(\.spaceID), [state.spaces[0].id, state.spaces[0].id])
+    }
+
     func testImportingTwiceAddsNothingTheSecondTime() {
         let state = AppState()
-        _ = state.adopt(imported: arc(), openTabs: [], symbolExists: anySymbol)
-        let again = state.adopt(imported: arc(), openTabs: [], symbolExists: anySymbol)
+        _ = state.adopt(imported: arc(), openTabs: [], into: state.currentSpace, symbolExists: anySymbol)
+        let again = state.adopt(imported: arc(), openTabs: [], into: state.currentSpace, symbolExists: anySymbol)
         XCTAssertEqual(again.spaces, 0)
         XCTAssertEqual(again.pins, 0)
         XCTAssertEqual(again.tabs, 0)
@@ -45,7 +54,7 @@ final class ImportMergeTests: XCTestCase {
         let open: [ImportedNode] = [.tab(url: "https://already.example", title: ""),
                                     .tab(url: "https://new.example", title: ""),
                                     .folder(title: "Group", symbol: nil, children: [.tab(url: "https://g.example", title: "")], expanded: true)]
-        let counts = state.adopt(imported: [], openTabs: open, symbolExists: anySymbol)
+        let counts = state.adopt(imported: [], openTabs: open, into: space, symbolExists: anySymbol)
         XCTAssertEqual(counts.tabs, 1)
         XCTAssertEqual(counts.pins, 1)
         XCTAssertEqual(space.today.map(\.url), ["https://new.example", "https://already.example"])
@@ -55,7 +64,7 @@ final class ImportMergeTests: XCTestCase {
 
     func testSymbolsThisMacLacksGiveWayToOurs() {
         let state = AppState()
-        _ = state.adopt(imported: arc(), openTabs: [], symbolExists: { _ in false })
+        _ = state.adopt(imported: arc(), openTabs: [], into: state.currentSpace, symbolExists: { _ in false })
         XCTAssertTrue(SpaceStyle.symbols.contains(state.currentSpace.symbol))
         XCTAssertNil(state.currentSpace.pinned.last?.icon)
     }

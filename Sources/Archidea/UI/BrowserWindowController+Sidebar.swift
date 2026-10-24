@@ -33,14 +33,18 @@ extension BrowserWindowController {
     func sidebarEditTheme(_ target: Space, from view: NSView) { editTheme(target, from: view) }
     func sidebarManageSpaces() { SettingsWindowController.shared.show(section: .spaces) }
     func sidebarRestyle(_ target: Space, color: String?, symbol: String?) { restyle(target, color: color, symbol: symbol) }
-    func sidebarChanged() { store.setNeedsSave() }
+    func sidebarChanged() {
+        store.setNeedsSave()
+        group.sidebarChanged(by: self)
+    }
     func sidebarExtensions(from view: NSView) { extensions.showMenu(from: view) }
 
     func sidebarResetPin(_ item: SidebarItem) {
         guard let home = item.pinnedURL else { return }
         item.url = home
-        runtime.liveTab(for: item)?.loadURL(home)
+        group.liveTab(for: item)?.loadURL(home)
         sidebar.reloadItem(item)
+        group.itemChanged(item, by: self)
         store.setNeedsSave()
     }
 
@@ -49,12 +53,12 @@ extension BrowserWindowController {
         space.remove(folder)
         if let parent = loc.parent { parent.children.insert(contentsOf: folder.children, at: loc.index) }
         else { space.pinned.insert(contentsOf: folder.children, at: loc.index) }
-        sidebar.reload()
+        reloadSidebar()
         store.setNeedsSave()
     }
 
     func sidebarFavicon(for item: SidebarItem) -> NSImage? {
-        if let image = runtime.liveTab(for: item)?.favicon { return image }
+        if let image = group.liveTab(for: item)?.favicon { return image }
         if let image = store.favicon(for: item) { return image }
         // Not opened since it came in (an import, a link): the icon the engine has for its page or site.
         if let image = Favicons.shared.cached(item.url) { return image }
@@ -66,15 +70,16 @@ extension BrowserWindowController {
         return nil
     }
 
-    /// New icons arrived for pages (an import stored them): rows ask again.
-    func refreshFavicons() { sidebar.reload() }
+    /// New icons arrived for pages (an import stored them): rows ask again, in every window.
+    func refreshFavicons() { reloadSidebar() }
 
+    /// Open in any window: the sidebar is the same in all of them.
     func sidebarIsLoaded(_ item: SidebarItem) -> Bool {
-        guard let tab = runtime.liveTab(for: item) else { return false }
+        guard let tab = group.liveTab(for: item) else { return false }
         return !tab.discarded
     }
 
     func sidebarIsLoading(_ item: SidebarItem) -> Bool {
-        runtime.liveTab(for: item)?.loading ?? false
+        group.liveTab(for: item)?.loading ?? false
     }
 }

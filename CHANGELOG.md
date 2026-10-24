@@ -5,6 +5,11 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **More than one window**: ⌘N opens another window on the same sidebar, and ⇧⌘W closes one. Every window has its
+  own space, its own tab in front and its own sidebar shown or hidden; the spaces, pins and Today are the same in
+  all of them. A page is open in one window at a time: pick a tab another window has in front and this one offers
+  to show that window or bring the page over; one open there in the background simply comes over. The windows
+  come back where they were at the next launch.
 - **Icons for folders and spaces**: about 140 symbols to search through, and emoji: a grid of common ones, and any other
   typed in, pasted or picked from the Character Viewer. A folder's icon is an outline while it's open and filled while
   it's closed; the current space's icon is filled, the others' outlines. Spaces imported from Arc keep their emoji.
@@ -20,8 +25,8 @@ under *What's new*.
 - Deleting a space that holds tabs asks first.
 - ⇧⌘T and the start page's *Recently Closed* survive a restart, and a removed pin comes back to its place (its
   folder, its position) instead of into Today.
-- Today tabs are archived while Archidea runs, not only at the next launch: every space keeps its tab in front and
-  tabs playing sound. Archived tabs are on ⇧⌘T.
+- Today tabs are archived while Archidea runs, not only at the next launch: the tabs a window has in front and
+  tabs playing sound stay. Archived tabs are on ⇧⌘T.
 - A private window no longer switches the search engine (and the full-address setting) back to the defaults for
   every window. Settings changed in a private window apply everywhere.
 - A pinned tab closed with no open Today tabs moves to another open pin, as 0.1.3 meant it to.

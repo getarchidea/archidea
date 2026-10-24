@@ -37,6 +37,7 @@
 "menu.app" = "Archidea";
 "menu.back" = "Back";
 "menu.closeTab" = "Close Tab";
+"menu.closeWindow" = "Close Window";
 "menu.copy" = "Copy";
 "menu.copyURL" = "Copy URL";
 "menu.cut" = "Cut";
@@ -349,6 +350,7 @@
 "import.csv.hint" = "For Apple Passwords: open the Passwords app, choose File › Export All Passwords, then pick the file here. It works for 1Password and Bitwarden exports too.";
 "settings.managers.apple" = "Export your passwords from the Passwords app and bring them in here.";
 "menu.newPrivateWindow" = "New Private Window";
+"menu.newWindow" = "New Window";
 "private.space" = "Private";
 "menu.help" = "Help";
 "menu.saveDiagnostics" = "Save Diagnostic Log";
@@ -400,6 +402,9 @@
 "update.error.server" = "GitHub didn’t return the update properly. Try again in a few minutes.";
 "update.error.damaged" = "The downloaded update didn’t pass verification, so it wasn’t installed. Archidea will try again later.";
 "start.closed" = "Recently Closed";
+"elsewhere.title" = "Open in another window";
+"elsewhere.show" = "Show Window";
+"elsewhere.move" = "Move Here";
 "start.hide" = "Remove from Start Page";
 "update.downloading" = "Downloading Archidea %@";
 "update.downloading.detail" = "It’s on its way; a Restart button shows in the sidebar once it’s ready.";

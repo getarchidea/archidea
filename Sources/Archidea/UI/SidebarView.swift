@@ -57,7 +57,8 @@ final class SidebarView: NSView, WindowDragSurface {
         didSet { list.delegate = delegate }
     }
     private let store: Store
-    private var space: Space { store.state.currentSpace }
+    private let windowState: WindowState
+    private var space: Space { store.state.space(shownIn: windowState) }
     /// The pins and Today.
     let list: SidebarList
     private var outline: SidebarOutline { list.outline }
@@ -98,9 +99,10 @@ final class SidebarView: NSView, WindowDragSurface {
 
     override var isFlipped: Bool { true }
 
-    init(store: Store) {
+    init(store: Store, window windowState: WindowState) {
         self.store = store
-        list = SidebarList(store: store)
+        self.windowState = windowState
+        list = SidebarList(store: store, window: windowState)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = false

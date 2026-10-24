@@ -70,6 +70,7 @@ final class EngineHost: NSObject, ArdiaCoreEngineDelegate {
 
     @objc(engineWillShutDown) func engineWillShutDown() {
         Trace.log("engine: will shut down")
+        app?.rememberWindows()
         app?.store.saveNow()
         Updater.shared.installOnQuit()
     }
@@ -88,8 +89,7 @@ final class EngineHost: NSObject, ArdiaCoreEngineDelegate {
 
     @objc(engine:permissionRequestDismissed:)
     func engine(_ engine: ArdiaCoreEngine, permissionRequestDismissed requestId: String) {
-        app?.windowController?.dismissPermissionRequest(requestId)
-        app?.privateDismiss(requestId)
+        app?.dismissPermissionRequest(requestId)
     }
 
     @objc(engine:extensionInstallPrompt:tab:)
@@ -103,7 +103,7 @@ final class EngineHost: NSObject, ArdiaCoreEngineDelegate {
 
     @objc(engine:extensionActionPopup:tab:)
     func engine(_ engine: ArdiaCoreEngine, extensionActionPopup popup: [String: Any], tab: ArdiaCoreTab) -> Bool {
-        guard let controller = app?.windowController, let id = popup["extensionId"] as? String else { return false }
+        guard let controller = app?.controller(for: tab), let id = popup["extensionId"] as? String else { return false }
         controller.extensions.openPopup(extensionId: id, from: nil)
         return true
     }

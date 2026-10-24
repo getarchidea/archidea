@@ -4,12 +4,18 @@ import ArdiaCore
 
 /// One browser window: its sidebar, the page beside it and everything between them and the engine.
 ///
-/// The class holds the window's state and its core actions (selecting, opening, closing, spaces); the rest lives in
+/// Normal windows share one sidebar (spaces, pins, Today) and each shows its own space and tab in it (`windowState`);
+/// a window's `group` is how it reaches the others. The class holds the window's state and its core actions
+/// (selecting, opening, closing, spaces); the rest lives in
 /// extensions next to it: `+Layout` (sidebar modes, the space's look), `+Sidebar` (the sidebar's requests),
 /// `+Events` (the engine's pages and window), `+Downloads` and `+Prompts` (cards). Members those files share are
 /// internal rather than private for that reason.
 final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRuntimeDelegate, SidebarViewDelegate {
+    /// The windows that share this one's sidebar: every normal window, or this private window alone.
+    let group: WindowGroup
     let store: Store
+    /// What this window shows of the shared sidebar: its space, the tab in front in each, its sidebar hidden or not.
+    let windowState: WindowState
     /// Where the browser-wide settings live: the main window's store, which a private window shares.
     let preferences: Store
     let profile: ArdiaCoreProfile
@@ -21,6 +27,12 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     let sidebar: SidebarView
     let content = ContentView()
     private let emptyState = StartPage()
+    private let elsewherePage = ElsewherePage()
+    /// The tab this window has in front while its page is in front in another window.
+    private(set) var shownElsewhere: SidebarItem?
+    /// The space whose look and list the window shows, to tell when another window moved it to another space.
+    private var appliedSpaceID: UUID?
+    private var catchUpWaiting = false
     private lazy var commandBar = CommandBar(controller: self)
     private(set) lazy var findBar = FindBar(controller: self)
     private lazy var spaceSwipe = SpaceSwipe(sidebar: sidebar, hasSeveralSpaces: { [weak self] in (self?.state.spaces.count ?? 0) > 1 },
@@ -50,24 +62,22 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     var devToolsViews: [ObjectIdentifier: NSView] = [:]
     /// NSEvent hands monitors back as opaque tokens (`Any`); they only go back to removeMonitor.
     private var monitors: [Any] = []
-    /// Notification observers, removed with the window (a private window comes and goes; the main one lives on).
+    /// Notification observers, removed with the window (windows come and go; the last normal one is only put away).
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     var overlayShown = false
     var overlayHide: DispatchWorkItem?
     var downloadsObserver: UUID?
     weak var downloadsPopover: NSPopover?
-    /// Archives stale Today tabs while the browser runs.
-    private var archiveTimer: Timer?
 
     /// The view in-window overlays (extension popups) are laid into.
     var overlayHost: NSView { root }
     private(set) lazy var history = HistoryIndex(profile: profile)
     var state: AppState { store.state }
-    var space: Space { state.currentSpace }
+    var space: Space { state.space(shownIn: windowState) }
     var window: NSWindow { coreWindow.window }
 
     var activeItem: SidebarItem? {
-        guard let id = space.selectedID else { return nil }
+        guard let id = windowState.selectedID(in: space) else { return nil }
         return space.find(id)
     }
 
@@ -81,15 +91,19 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// The browser-wide settings (search engine, archiving, the blocker…), the same in every window.
     var settings: BrowserSettings { preferences.state.settings }
 
-    /// `preferences` is the main window's store for a private window, whose own store only holds its sidebar.
-    init(store: Store, profile: ArdiaCoreProfile, preferences: Store? = nil) {
-        self.store = store
-        self.preferences = preferences ?? store
+    /// `windowState` is one of `group.store`'s windows. `preferences` is the normal windows' store for a private
+    /// window, whose own store only holds its sidebar.
+    init(group: WindowGroup, profile: ArdiaCoreProfile, windowState: WindowState, preferences: Store? = nil) {
+        self.group = group
+        store = group.store
+        self.windowState = windowState
+        self.preferences = preferences ?? group.store
         self.profile = profile
         coreWindow = ArdiaCoreWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820))
         runtime = TabRuntime(coreWindow: coreWindow, profile: profile)
-        sidebar = SidebarView(store: store)
+        sidebar = SidebarView(store: group.store, window: windowState)
         super.init()
+        group.add(self)
         coreWindow.delegate = self
         coreWindow.prepare(profile)
         coreWindow.activeProfile = profile
@@ -102,7 +116,6 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         applySpace()
         applySidebarMode(animated: false)
         applySettings()
-        archiveTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak self] _ in self?.archiveStaleToday() }
     }
 
     private func configureWindow() {
@@ -119,9 +132,12 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         if isPrivate {
             window.center()
             window.setFrameOrigin(NSPoint(x: window.frame.minX + 40, y: window.frame.minY - 40))
-        } else {
-            if !window.setFrameUsingName("DriftMain") { window.center() }
-            window.setFrameAutosaveName("DriftMain")
+        } else if let saved = windowState.frame.map(NSRectFromString), saved.width >= window.minSize.width,
+                  NSScreen.screens.contains(where: { $0.visibleFrame.intersects(saved) }) {
+            window.setFrame(saved, display: false)
+        } else if !window.setFrameUsingName("DriftMain") {
+            // The one window from before there were several kept its frame under that name.
+            window.center()
         }
         TrafficLights.install(on: window)
         // Coming back from another app, AppKit may leave no window key; then clicks only focus the window
@@ -157,6 +173,17 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                 DispatchQueue.main.async { self?.restorePageFocus(after: note.name.rawValue) }
             }
         }
+        observe(NSWindow.didBecomeKeyNotification, object: window) { [weak self] _ in
+            guard let self else { return }
+            group.noteFront(self)
+            // The app's light or dark look (and with it the pages') is the space in front's, in whichever window.
+            applyTheme(of: space)
+            // A page this window waits for may be free by now.
+            refreshFront()
+        }
+        for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+            observe(name, object: window) { [weak self] _ in self?.rememberFrame() }
+        }
         observe(Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, in: DistributedNotificationCenter.default()) { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.applyTheme(of: self.space) }
@@ -186,15 +213,15 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             self?.store.setNeedsSave()
         }
         root.onCollapse = { [weak self] in
-            guard let self, !state.sidebarHidden else { return }
-            state.sidebarHidden = true
+            guard let self, !windowState.sidebarHidden else { return }
+            windowState.sidebarHidden = true
             overlayShown = false
             applySidebarMode(animated: true, duration: RootView.collapseDuration)
             store.setNeedsSave()
         }
         root.onExpand = { [weak self] in
-            guard let self, state.sidebarHidden else { return }
-            state.sidebarHidden = false
+            guard let self, windowState.sidebarHidden else { return }
+            windowState.sidebarHidden = false
             overlayShown = false
             applySidebarMode(animated: true, duration: RootView.collapseDuration)
             store.setNeedsSave()
@@ -202,6 +229,17 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
         content.addSubview(emptyState)
         content.emptyState = emptyState
+        elsewherePage.isHidden = true
+        content.addSubview(elsewherePage)
+        elsewherePage.onShowWindow = { [weak self] in
+            guard let self, let item = shownElsewhere else { return }
+            group.window(holding: item)?.showWindow()
+        }
+        elsewherePage.onMoveHere = { [weak self] in
+            guard let self, let item = shownElsewhere else { return }
+            group.take(item, into: self)
+            select(item, cause: "moved-here")
+        }
         emptyState.onSearch = { [weak self] in self?.showCommandBar(editing: false) }
         emptyState.onOpen = { [weak self] url in self?.openInNewTab(url) }
         emptyState.onReopen = { [weak self] index in self?.reopenClosedTab(at: index) }
@@ -211,8 +249,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             refreshStartPage()
         }
         content.onLayout = { [weak self] in
-            self?.layoutTab()
-            self?.placeLoadingBar()
+            guard let self else { return }
+            elsewherePage.frame = content.bounds
+            layoutTab()
+            placeLoadingBar()
         }
     }
 
@@ -299,6 +339,49 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         sidebar.reload()
     }
 
+    /// After a change to the sidebar every window shares: this window's list shows it now, the others' next.
+    func reloadSidebar() {
+        sidebar.reload()
+        group.sidebarChanged(by: self)
+    }
+
+    /// Another window changed the shared sidebar: this one shows it too, once it isn't in the middle of something of
+    /// its own (a rename, a menu), which a reload would cut short.
+    func catchUp() {
+        guard !sidebar.isBusy else {
+            guard !catchUpWaiting else { return }
+            catchUpWaiting = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.catchUpWaiting = false
+                self?.catchUp()
+            }
+            return
+        }
+        if space.id != appliedSpaceID {
+            // Its space went (deleted in another window): the window shows the one it was moved to.
+            applySpace()
+        } else {
+            applyTheme(of: space)
+            sidebar.reload()
+            refreshFront()
+        }
+    }
+
+    /// Where the window is, kept for the next launch. Not in full screen, nor while it's put away.
+    func rememberFrame() {
+        guard !isPrivate, window.isVisible, !window.styleMask.contains(.fullScreen) else { return }
+        let frame = NSStringFromRect(window.frame)
+        guard windowState.frame != frame else { return }
+        windowState.frame = frame
+        store.setNeedsSave()
+    }
+
+    /// A new window comes up a little below and to the right of `other`, its size.
+    func cascade(from other: NSWindow) {
+        let frame = other.frame.offsetBy(dx: 26, dy: -26)
+        window.setFrame(window.constrainFrameRect(frame, to: other.screen), display: false)
+    }
+
     /// The address bar's search and full-URL switches are app-wide, so every window sets them from the same settings;
     /// the bundled extensions load into the normal profile, and private windows get them from there.
     private func applySettings() {
@@ -315,19 +398,96 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         window.makeKeyAndOrderFront(nil)
     }
 
+    // MARK: pages in other windows
+
+    /// Whether this window has `item`'s page in front, on screen.
+    func isShowing(_ item: SidebarItem) -> Bool {
+        guard let tab = shownTab, window.isVisible, !window.isMiniaturized else { return false }
+        return runtime.item(for: tab) === item
+    }
+
+    /// Whether this window has `item` in front and waits for its page, which another window shows.
+    func waitsFor(_ item: SidebarItem) -> Bool { shownElsewhere === item }
+
+    /// Lets `item`'s page go to another window: this one forgets it without closing it, and says where it went if
+    /// it was in front.
+    func giveUp(_ item: SidebarItem) -> ArdiaCoreTab? {
+        guard let tab = runtime.liveTab(for: item) else { return nil }
+        let wasShown = tab === shownTab
+        // Chrome's window picks another of its tabs once this one leaves it; that isn't the person choosing.
+        ownActivation = (wasShown ? nil : shownTab, Date().addingTimeInterval(1.5))
+        if wasShown { show(nil) }
+        devToolsViews.removeValue(forKey: ObjectIdentifier(tab))?.removeFromSuperview()
+        _ = runtime.release(item)
+        if wasShown, item === activeItem { showElsewhere(item) }
+        return tab
+    }
+
+    /// A page another window let go of, for `item`: bound here first, so the engine's "tab inserted" for it is known
+    /// as ours, not a new tab to adopt.
+    func receive(_ tab: ArdiaCoreTab, for item: SidebarItem) {
+        runtime.bind(tab, to: item)
+        coreWindow.adoptTab(tab)
+        tab.view.isHidden = true
+    }
+
+    /// `item` is going, or its page is: its page closes if it's open here, and if this window had it in front
+    /// (or waited for it) the window shows nothing in its place.
+    func unloadOwn(_ item: SidebarItem) {
+        let live = runtime.liveTab(for: item)
+        let inFront = shownElsewhere === item || (live != nil && live === shownTab)
+        if live != nil { unloadHere(item) }
+        guard inFront else { return }
+        if let owner = state.space(containing: item) { windowState.select(nil, in: owner) }
+        show(nil)
+    }
+
+    /// After a change elsewhere, what this window shows still fits what it has in front: a page it waited for comes
+    /// once its window lets go of it, and a page that left this window's space gives way to the start page.
+    func refreshFront() {
+        let item = activeItem
+        if let waiting = shownElsewhere {
+            guard waiting === item else { return show(nil) }
+            if let holder = group.window(holding: waiting), holder !== self, holder.isShowing(waiting) { return }
+            select(waiting, focusPage: window.isKeyWindow, cause: "page-free")
+            return
+        }
+        if let tab = shownTab, runtime.item(for: tab) !== item { show(nil) }
+    }
+
+    private func showElsewhere(_ item: SidebarItem) {
+        show(nil)
+        shownElsewhere = item
+        emptyState.isHidden = true
+        elsewherePage.frame = content.bounds
+        elsewherePage.show(item, icon: group.liveTab(for: item)?.favicon ?? store.favicon(for: item))
+        elsewherePage.isHidden = false
+    }
+
+    private func updateWindowTitle() {
+        let title = shownTab?.title ?? ""
+        window.title = title.isEmpty ? L("app.name") : title
+    }
+
     // MARK: selection
 
     func select(_ item: SidebarItem, focusPage: Bool = true, cause: String = "unspecified") {
         Trace.log("activate \(item.traceName) cause=\(cause) was=\(activeItem?.traceName ?? "-")")
         if let owner = state.space(containing: item), owner !== space {
-            state.currentSpaceID = owner.id
+            windowState.spaceID = owner.id
             applySpace(selecting: false)
         }
-        space.selectedID = item.id
+        windowState.select(item.id, in: space)
         item.lastActive = Date()
         sidebar.reveal(item)
         store.setNeedsSave()
         guard !item.isFolder else { return }
+        // A page is open in one window at a time: one in front in another window stays there, and this window says
+        // so; one open there behind another page comes over.
+        if let holder = group.window(holding: item), holder !== self {
+            if holder.isShowing(item) { return showElsewhere(item) }
+            group.take(item, into: self)
+        }
         let tab = runtime.ensureTab(for: item)
         show(tab)
         expectActivation(of: tab)
@@ -336,13 +496,17 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
 
     func show(_ tab: ArdiaCoreTab?) {
+        shownElsewhere = nil
+        elsewherePage.isHidden = true
         if let old = shownTab, old !== tab {
             old.view.isHidden = true
             old.devToolsView?.isHidden = true
             old.noteShown(byHost: false)
             findBar.close()
+            if let item = runtime.item(for: old) { group.letGo(item, by: self) }
         }
         shownTab = tab
+        updateWindowTitle()
         emptyState.isHidden = tab != nil
         if tab == nil { refreshStartPage() }
         sitePrompts.refresh()
@@ -374,6 +538,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
 
     private func applySpace(selecting: Bool = true, direction: Int = 0) {
+        appliedSpaceID = space.id
         applyTheme(of: space)
         sidebar.reload(direction: direction)
         guard selecting else { return }
@@ -407,11 +572,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         // Bound first, so the engine's "tab inserted" for it is known as ours, not a new tab to adopt.
         runtime.bind(tab, to: item)
         coreWindow.adoptTab(tab)
-        sidebar.reload()
+        reloadSidebar()
         store.setNeedsSave()
         guard foreground else { return }
         // Chosen before the window shows, so it doesn't open on an empty page (and the new-tab bar with it).
-        space.selectedID = item.id
+        windowState.select(item.id, in: space)
         showWindow()
         NSApp.activate()
         DispatchQueue.main.async { [weak self] in self?.select(item, cause: "adopted-page") }
@@ -422,7 +587,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         if commandBar.superview != nil { commandBar.hide() }
         let item = SidebarItem(tab: URLInput.resolve(input))
         space.today.insert(item, at: 0)
-        sidebar.reload()
+        reloadSidebar()
         select(item, cause: "new-tab")
     }
 
@@ -430,6 +595,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         guard let item = activeItem, !item.isFolder else { return openInNewTab(input) }
         let url = URLInput.resolve(input)
         item.url = url
+        // Going somewhere from this window brings the page here, if another window has it.
+        group.take(item, into: self)
         runtime.ensureTab(for: item).loadURL(url)
         select(item, cause: "navigate")
     }
@@ -444,7 +611,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// takes it out of the list (⇧⌘T brings it back).
     /// `remembering` puts it on the reopen-closed-tab stack; a tab that only fetched a download isn't worth reopening.
     func close(_ item: SidebarItem, remembering: Bool = true) {
-        if space.isPinned(item), runtime.liveTab(for: item) == nil { return remove(item) }
+        if space.isPinned(item), group.liveTab(for: item) == nil { return remove(item) }
         let wasActive = item === activeItem
         let neighbor = wasActive ? neighbor(of: item) : nil
         unloadTab(item)
@@ -455,10 +622,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             space.remove(item)
         }
         if wasActive {
-            space.selectedID = nil
+            windowState.select(nil, in: space)
             show(nil)
         }
-        sidebar.reload()
+        reloadSidebar()
         store.setNeedsSave()
         if let neighbor { select(neighbor, cause: "close-neighbor") }
     }
@@ -470,10 +637,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         unloadTab(item)
         space.remove(item)
         if wasActive {
-            space.selectedID = nil
+            windowState.select(nil, in: space)
             show(nil)
         }
-        sidebar.reload()
+        reloadSidebar()
         store.setNeedsSave()
     }
 
@@ -497,17 +664,17 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         let pinning = !owner.isPinned(item)
         owner.remove(item)
         if pinning { owner.place(item, in: .pinned, at: owner.pinned.count) } else { owner.place(item, in: .today, at: 0) }
-        sidebar.reload()
+        reloadSidebar()
         sidebar.reflectSelection()
         store.setNeedsSave()
     }
 
-    /// Today tabs Clear would close: everything except the active tab, tabs playing sound,
+    /// Today tabs Clear would close: everything except the tabs some window has in front, tabs playing sound,
     /// and tabs used within the last `clearKeepsMinutes`.
     var clearableTabs: [SidebarItem] {
         let keepAfter = Date().addingTimeInterval(-Double(settings.clearKeepsMinutes) * 60)
         return space.today.filter { item in
-            item !== activeItem && !(runtime.liveTab(for: item)?.audible ?? false) && item.lastActive < keepAfter
+            !state.isInFront(item, in: space) && !(group.liveTab(for: item)?.audible ?? false) && item.lastActive < keepAfter
         }
     }
 
@@ -519,39 +686,20 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             unloadTab(item)
             space.remove(item)
         }
-        sidebar.reload()
+        reloadSidebar()
         store.setNeedsSave()
     }
 
-    /// Today tabs untouched for the archive time go while the browser runs too, not only at the next launch: all but
-    /// each space's tab in front and those playing sound. They're on ⇧⌘T like any closed tab.
-    func archiveStaleToday() {
-        let hours = settings.archiveHours
-        guard hours > 0 else { return }
-        let cutoff = Date().addingTimeInterval(-Double(hours) * 60 * 60)
-        var archived = 0
-        for owner in state.spaces {
-            let stale = owner.staleToday(before: cutoff) { item in
-                item.id == owner.selectedID || self.runtime.liveTab(for: item)?.audible == true
-            }
-            for item in stale {
-                state.remember(item)
-                unloadTab(item)
-                owner.remove(item)
-                archived += 1
-            }
-        }
-        guard archived > 0 else { return }
-        Trace.log("archived \(archived) Today tabs untouched for \(hours) h")
-        sidebar.reload()
-        store.setNeedsSave()
-    }
+    /// The group archives for all its windows (`WindowGroup.archiveStaleToday`).
+    func archiveStaleToday() { group.archiveStaleToday() }
 
     /// After switching back to Drift the key window can end up being one of Chrome's hidden helper windows, or none;
     /// then the first click only focuses, and cursor changes stop. Unless the user is in one of our own windows
     /// (settings, a sheet, a popover), the browser window takes key status back.
     private func reclaimKeyWindow() {
         guard window.isVisible, !window.isMiniaturized else { return }
+        // With several browser windows, the one in front takes it back.
+        guard NSApp.orderedWindows.first(where: { $0.isVisible && $0.identifier == TrafficLights.identifier }) === window else { return }
         let key = NSApp.keyWindow
         Trace.log("app active, key window: \(key.map { NSStringFromClass(type(of: $0)) } ?? "none") visible=\(key?.isVisible ?? false)")
         if let key, key === window || key === window.attachedSheet { return }
@@ -604,8 +752,9 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     /// Imported spaces and open tabs join the sidebar (see `AppState.adopt`).
     func adoptImported(spaces imported: [ImportedSpace], openTabs: [ImportedNode]) -> (spaces: Int, pins: Int, tabs: Int) {
-        let counts = state.adopt(imported: imported, openTabs: openTabs, symbolExists: Glyphs.exists)
+        let counts = state.adopt(imported: imported, openTabs: openTabs, into: space, symbolExists: Glyphs.exists)
         applySpace()
+        group.sidebarChanged(by: self)
         store.setNeedsSave()
         return counts
     }
@@ -620,7 +769,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         ownActivation = (tab ?? ownActivation?.tab, Date().addingTimeInterval(1.5))
     }
 
-    private func unloadTab(_ item: SidebarItem) {
+    /// Closes `item`'s page in whichever window has it open; windows that had it in front, or waited for it, show
+    /// nothing in its place (`unloadOwn`).
+    private func unloadTab(_ item: SidebarItem) { group.unload(item) }
+
+    private func unloadHere(_ item: SidebarItem) {
         expectActivation(of: activeTab === runtime.liveTab(for: item) ? nil : activeTab)
         runtime.unload(item)
     }
@@ -647,16 +800,16 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     /// ⇧⌘T: the newest closed tab comes back, a pin to its place, in its own space.
     func reopenClosedTab() {
-        guard let reopened = state.reopenLastClosed() else { return }
+        guard let reopened = state.reopenLastClosed(fallback: space) else { return }
         if reopened.space !== space { switchSpace(to: reopened.space) }
-        sidebar.reload()
+        reloadSidebar()
         select(reopened.item, cause: "reopen-closed")
     }
 
     func newFolder() {
         let folder = SidebarItem(folder: L("folder.new"))
         space.pinned.insert(folder, at: 0)
-        sidebar.reload()
+        reloadSidebar()
         sidebar.rename(folder, selectAll: true)
         store.setNeedsSave()
     }
@@ -678,7 +831,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
 
     func showCommandBar(editing: Bool) {
-        let sidebarVisible = !state.sidebarHidden || overlayShown
+        let sidebarVisible = !windowState.sidebarHidden || overlayShown
         let anchor = editing && sidebarVisible && !contentFullscreen
             ? root.convert(sidebar.addressAnchor.bounds, from: sidebar.addressAnchor) : nil
         if anchor == nil, overlayShown { setOverlay(false) }
@@ -702,7 +855,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         guard target !== space else { return }
         let from = state.spaces.firstIndex { $0 === space } ?? 0
         let to = state.spaces.firstIndex { $0 === target } ?? 0
-        state.currentSpaceID = target.id
+        windowState.spaceID = target.id
         applySpace(direction: to > from ? 1 : -1)
         store.setNeedsSave()
     }
@@ -727,13 +880,14 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             let created = Space(name: name, symbol: symbol, colorHex: palette[state.spaces.count % palette.count])
             state.spaces.append(created)
             switchSpace(to: created)
+            group.sidebarChanged(by: self)
         }
     }
 
     func rename(_ target: Space) {
         ask(L("space.rename.title"), placeholder: target.name, value: target.name, confirm: L("space.rename.confirm")) { [weak self] name in
             target.name = name
-            self?.sidebar.reload()
+            self?.reloadSidebar()
             self?.store.setNeedsSave()
         }
     }
@@ -750,14 +904,12 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     private func deleteNow(_ target: Space) {
         guard state.spaces.count > 1, state.spaces.contains(where: { $0 === target }) else { return }
-        for item in target.allTabs { unloadTab(item) }
-        state.spaces.removeAll { $0 === target }
-        if state.currentSpaceID == target.id {
-            state.currentSpaceID = state.spaces[0].id
-            applySpace()
-        } else {
-            sidebar.reload()
-        }
+        for item in target.allTabs { group.unload(item) }
+        let shown = target === space
+        // Windows that showed it (this one, others) show the first space left.
+        state.removeSpace(target)
+        if shown { applySpace() } else { sidebar.reload() }
+        group.sidebarChanged(by: self)
         store.setNeedsSave()
     }
 
@@ -770,9 +922,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         let pinned = from.isPinned(item)
         from.remove(item)
         target.place(item, in: pinned ? .pinned : .today, at: pinned ? target.pinned.count : 0)
-        if let selected = from.selectedID, from.find(selected) == nil { from.selectedID = nil }
-        if wasActive { show(nil) }
-        sidebar.reload()
+        if wasActive {
+            windowState.select(nil, in: from)
+            show(nil)
+        }
+        reloadSidebar()
         store.setNeedsSave()
     }
 
@@ -781,10 +935,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         observers.append((center, center.addObserver(forName: name, object: object, queue: .main, using: block)))
     }
 
-    /// A closing private window takes its event monitors, observers and timers with it; left behind they'd run on
-    /// every mouse move for good.
+    /// A closing window takes its event monitors, observers and timers with it; left behind they'd run on every mouse
+    /// move for good.
     private func tearDown() {
-        Trace.log("private window closes: \(monitors.count) event monitors, \(observers.count) observers go")
+        Trace.log("window closes: \(monitors.count) event monitors, \(observers.count) observers go")
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
         observers.forEach { $0.0.removeObserver($0.1) }
@@ -792,9 +946,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         downloadsObserver.map(Downloads.shared.stopObserving)
         downloadsObserver = nil
         runtime.stop()
-        archiveTimer?.invalidate()
-        archiveTimer = nil
         extensions.closePopup()
+        group.remove(self)
     }
 
     @objc(windowShouldClose:)
@@ -802,12 +955,24 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         if isPrivate {
             // Closing a private window ends it: its tabs, and with them the off-the-record profile, go away.
             tearDown()
-            (NSApp.delegate as? AppDelegate)?.privateWindowClosed(self)
+            (NSApp.delegate as? AppDelegate)?.windowClosed(self)
             return true
         }
+        guard group.windows.count > 1 else {
+            // The last normal window is only put away: the browser runs on, and the Dock icon brings it back as it was.
+            rememberFrame()
+            store.saveNow()
+            self.window.orderOut(nil)
+            return false
+        }
+        // Another normal window stays: this one goes, and its pages with it. Its tabs stay in the sidebar.
+        runtime.detachAll()
+        tearDown()
+        state.windows.removeAll { $0 === windowState }
+        group.sidebarChanged(by: self)
         store.saveNow()
-        self.window.orderOut(nil)
-        return false
+        (NSApp.delegate as? AppDelegate)?.windowClosed(self)
+        return true
     }
 
     /// Whether this window shows `tab`.
@@ -839,7 +1004,7 @@ extension BrowserWindowController {
     func debugResize(to x: CGFloat) { root.debugResize(to: x); root.layoutSubtreeIfNeeded() }
     func debugBeginResize() { root.debugBeginResize() }
     func debugEndResize() { root.debugEndResize() }
-    var debugSidebarState: String { "hidden=\(state.sidebarHidden) overlay=\(overlayShown) width=\(Int(root.sidebarWidth)) frame=\(Int(sidebar.frame.minX))..\(Int(sidebar.frame.maxX))" }
+    var debugSidebarState: String { "hidden=\(windowState.sidebarHidden) overlay=\(overlayShown) width=\(Int(root.sidebarWidth)) frame=\(Int(sidebar.frame.minX))..\(Int(sidebar.frame.maxX))" }
     func debugClickRow(of item: SidebarItem) { sidebar.debugClickRow(of: item) }
     func debugTypeInSidebar(_ text: String) { sidebar.debugKey(characters: text, keyCode: 0) }
     func debugKeyInSidebar(_ keyCode: UInt16) { sidebar.debugKey(characters: "", keyCode: keyCode) }

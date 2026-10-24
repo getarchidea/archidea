@@ -86,6 +86,24 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
         if !tab.closed { tab.close() }
     }
 
+    /// Hands `item`'s page over to another window, which binds it: this runtime forgets it without closing it.
+    func release(_ item: SidebarItem) -> ArdiaCoreTab? {
+        guard let tab = tabs.removeValue(forKey: item.id) else { return nil }
+        items.removeValue(forKey: ObjectIdentifier(tab))
+        blocked.removeValue(forKey: ObjectIdentifier(tab))
+        tab.view.removeFromSuperview()
+        return tab
+    }
+
+    /// The window closes while the browser runs on: its pages close with Chrome's window, and none of that is news
+    /// for the sidebar, which keeps their tabs.
+    func detachAll() {
+        for tab in tabs.values { tab.delegate = nil }
+        tabs.removeAll()
+        items.removeAll()
+        blocked.removeAll()
+    }
+
     func forget(_ tab: ArdiaCoreTab) {
         guard let item = items.removeValue(forKey: ObjectIdentifier(tab)) else { return }
         tabs.removeValue(forKey: item.id)
