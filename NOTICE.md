@@ -10,6 +10,7 @@ the following work, each under its own license.
 | ArdiaCore engine layer, by Mantra Patel ([source](https://github.com/mantrakp04/ardia)) | the engine's Objective-C API and services | GPL-3.0 |
 | Browser import readers, by Mantra Patel | `Sources/Archidea/Import/Readers` | Apache-2.0 (see the folder's `LICENSE` and `NOTICE.md`) |
 | uBlock Origin, by Raymond Hill and contributors | the optional built-in blocker | GPL-3.0 |
+| autoconsent, by DuckDuckGo ([source](https://github.com/duckduckgo/autoconsent)) | cookie banners (`Extensions/autoconsent`) | MPL-2.0 (its `LICENSE` ships with it) |
 
 The engine is prebuilt from the sources above. `vendor/engine/ENGINE` pins the exact build and its checksum, and the
 engine release on GitHub ([engine-155.0.8059.84](https://github.com/getarchidea/archidea/releases/tag/engine-155.0.8059.84))

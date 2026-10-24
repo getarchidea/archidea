@@ -43,8 +43,10 @@ fi
 
 "$root/scripts/check-strings.sh"
 "$root/scripts/fetch-ublock.sh"
+"$root/scripts/fetch-autoconsent.sh"
 mkdir -p "$app/Contents/Resources/Extensions"
 rsync -a --delete "$root/vendor/ublock/ext/" "$app/Contents/Resources/Extensions/ublock/"
+rsync -a --delete "$root/vendor/autoconsent/ext/" "$app/Contents/Resources/Extensions/autoconsent/"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 # Where updates come from: ARCHIDEA_RELEASES=owner/name, else the GitHub remote of this checkout, if any.
 releases=${ARCHIDEA_RELEASES:-$(git -C "$root" config --get remote.origin.url 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+/[^/]+)$#\1#p' | sed 's/\.git$//' || true)}

@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **Cookie banners** go away on their own: Archidea answers them with "reject all" where the site allows it and hides
+  the rest. It's on by default; Settings › Privacy and the site controls behind the address switch it off.
 - The sidebar slid out over the page stays out while you rename a tab, use its menu or a picker it opened, instead
   of sliding away mid-edit.
 - Renaming a tab with a long name, or editing a long address, shows the end of it where the caret is.
