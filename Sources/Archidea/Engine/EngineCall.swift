@@ -50,8 +50,8 @@ struct EngineDone: Decodable {}
 /// on the main queue. The functions live in the engine framework and are found with dlsym. Callers use the typed
 /// calls in `EngineServices`.
 enum EngineCall {
-    private typealias Reply = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> Void
-    private typealias Call = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?, Reply, UnsafeMutableRawPointer?) -> Void
+    private typealias Callback = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> Void
+    private typealias Call = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?, Callback, UnsafeMutableRawPointer?) -> Void
 
     /// One call's completion; it runs once, on the main queue: with the reply's bytes, or with nil when a timeout ran
     /// out first.
@@ -111,13 +111,15 @@ enum EngineCall {
             }
         }
         let context = Unmanaged.passRetained(pending).toOpaque()
-        let reply: Reply = { context, json in
-            guard let context else { return }
-            let pending = Unmanaged<Pending>.fromOpaque(context).takeRetainedValue()
-            let data = json.map { Data(String(cString: $0).utf8) } ?? Data()
-            DispatchQueue.main.async { pending.finish(data) }
-        }
-        profile.path.withCString { path in call(path, buffer.assumingMemoryBound(to: CChar.self), reply, context) }
+        profile.path.withCString { path in call(path, buffer.assumingMemoryBound(to: CChar.self), replied, context) }
+    }
+
+    /// Where the engine replies to every call: `context` is the call's `Pending`, retained until now.
+    private static let replied: Callback = { context, json in
+        guard let context else { return }
+        let pending = Unmanaged<Pending>.fromOpaque(context).takeRetainedValue()
+        let data = json.map { Data(String(cString: $0).utf8) } ?? Data()
+        DispatchQueue.main.async { pending.finish(data) }
     }
 
     /// A reply as `Reply`; an object with an "error" in it is the engine saying no, whatever else it holds.
@@ -143,7 +145,7 @@ enum EngineCall {
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            if !c.contains(.error) || (try c.decodeNil(forKey: .error)) {
+            if try !c.contains(.error) || c.decodeNil(forKey: .error) {
                 message = nil
             } else {
                 message = (try? c.decode(String.self, forKey: .error)) ?? "error"
