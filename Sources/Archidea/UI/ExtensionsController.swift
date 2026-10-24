@@ -12,8 +12,9 @@ final class ExtensionsController: NSObject, ArdiaCoreTabDelegate {
         self.controller = controller
     }
 
+    /// What the extensions menu lists. The cookie-banner extension works on its own and has nothing to show.
     private var installed: [[String: Any]] {
-        (controller?.profile.extensions ?? []).sorted {
+        (controller?.profile.extensions ?? []).filter { $0["id"] as? String != BundledExtension.cookieBanners.id }.sorted {
             ($0["name"] as? String ?? "").localizedCaseInsensitiveCompare($1["name"] as? String ?? "") == .orderedAscending
         }
     }

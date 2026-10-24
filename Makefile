@@ -18,7 +18,7 @@ export ARCHIDEA_TRIPLE := arm64-apple-macosx
 help: ## Lists the commands
 	@awk 'BEGIN { FS = ":.*## " } /^[a-z-]+:.*## / { printf "  make %-14s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-setup: ## Checks the toolchain, fetches the engine and uBlock Origin, installs the dev tools (Brewfile)
+setup: ## Checks the toolchain, fetches the engine and the bundled extensions, installs the dev tools (Brewfile)
 	@scripts/setup.sh
 
 build: ## Debug build → build/Archidea.app

@@ -20,4 +20,5 @@ fi
 
 [ -d "vendor/engine/Chromium Framework.framework" ] || scripts/fetch-engine.sh
 scripts/fetch-ublock.sh
+scripts/fetch-autoconsent.sh
 echo "✓ ready: make dev"

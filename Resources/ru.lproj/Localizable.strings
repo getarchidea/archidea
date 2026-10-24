@@ -408,3 +408,6 @@
 "space.delete.confirm" = "Удалить";
 "update.cantInstall" = "Archidea не может обновиться на этом месте";
 "update.cantInstall.detail" = "Перенесите Archidea в папку «Программы», откройте её оттуда и снова нажмите «Перезапустить».";
+"settings.cookieBanners" = "Скрывать баннеры о cookie";
+"settings.cookieBanners.detail" = "Отвечает на окна про cookie «отклонить всё», где сайт это позволяет, а остальные прячет. Встроенный autoconsent от DuckDuckGo.";
+"site.cookieBanners" = "Скрывать баннеры о cookie";

@@ -324,7 +324,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     private func preferencesView() -> NSView {
         var cards: [NSView] = []
-        if AdBlocker.isAvailable {
+        if BundledExtension.adBlocker.isAvailable {
             cards.append(ChoiceCard(icon: nil, title: L("onboarding.adBlock.title"), detail: L("onboarding.adBlock.text"), mark: .check,
                                     selected: preferences.adBlock, toggles: true) { [weak self] in self?.preferences.adBlock.toggle() })
         }
@@ -337,7 +337,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func applyPreferences() {
-        let adBlock = preferences.adBlock && AdBlocker.isAvailable
+        let adBlock = preferences.adBlock && BundledExtension.adBlocker.isAvailable
         browser?.updateSettings { $0.adBlock = adBlock }
         if preferences.defaultBrowser {
             for scheme in ["http", "https"] {

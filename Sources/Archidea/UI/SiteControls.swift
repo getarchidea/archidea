@@ -87,7 +87,7 @@ final class SiteControls: NSViewController {
         zoomControl.spacing = 4
         updateZoom()
         var rows: [NSView] = []
-        if AdBlocker.isAvailable {
+        if BundledExtension.adBlocker.isAvailable {
             let blocker = NSSwitch()
             blocker.controlSize = .small
             blocker.state = controller?.settings.adBlock == true ? .on : .off
@@ -96,6 +96,14 @@ final class SiteControls: NSViewController {
             let count = controller?.runtime.blockedCount(for: tab) ?? 0
             let title = blocker.state == .on && count > 0 ? L("site.adBlock.count", count) : L("site.adBlock")
             rows.append(ControlRow(symbol: "shield.lefthalf.filled", title: title, control: blocker))
+        }
+        if BundledExtension.cookieBanners.isAvailable {
+            let cookies = NSSwitch()
+            cookies.controlSize = .small
+            cookies.state = controller?.settings.hideCookieBanners == true ? .on : .off
+            cookies.target = self
+            cookies.action = #selector(cookieBannersChanged(_:))
+            rows.append(ControlRow(symbol: "hand.raised", title: L("site.cookieBanners"), control: cookies))
         }
         rows.append(ControlRow(symbol: "plus.magnifyingglass", title: L("site.zoom"), control: zoomControl))
 
@@ -253,6 +261,13 @@ final class SiteControls: NSViewController {
         guard let controller else { return }
         let on = sender.state == .on
         controller.updateSettings { $0.adBlock = on }
+        tab.reload()
+    }
+
+    @objc private func cookieBannersChanged(_ sender: NSSwitch) {
+        guard let controller else { return }
+        let on = sender.state == .on
+        controller.updateSettings { $0.hideCookieBanners = on }
         tab.reload()
     }
 
