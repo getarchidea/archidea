@@ -182,7 +182,7 @@ final class PromptCard: NSView {
         let buttons = NSStackView(views: [NSView()] + request.buttons.map { button in
             PromptButton(title: button.title, style: button.style) { [weak self] in
                 guard let self else { return }
-                settle { button.action(inputs.map(\.stringValue)) }
+                settle { button.action(self.inputs.map(\.stringValue)) }
             }
         })
         buttons.spacing = 8
