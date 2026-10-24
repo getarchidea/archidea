@@ -10,6 +10,8 @@ DATA ?= $(CURDIR)/build/dev-data
 # The toolchain's swift-format (Swift 6), else a separately installed one.
 SWIFT_FORMAT := $(shell command -v swift-format >/dev/null 2>&1 && echo swift-format || echo swift format)
 FORMATTED := Sources Tests Package.swift
+# Always Apple silicon, as the engine is: a shell under Rosetta (CodeQL's tracer runs one) would build for x86_64.
+export ARCHIDEA_TRIPLE := arm64-apple-macosx
 
 .PHONY: help setup build release-build bundle dev run watch test lint format package clean release release-minor release-major
 
@@ -28,7 +30,7 @@ release-build: ## Optimised build → build/Archidea.app
 bundle:
 	@[ -d "vendor/engine/Chromium Framework.framework" ] || scripts/fetch-engine.sh
 	@[ ! -d Sources/Dev ] || echo "note: development hooks now live in Sources/Archidea/Dev; move Sources/Dev there to keep them" >&2
-	swift build -c $(CONFIG) --product Archidea
+	swift build -c $(CONFIG) --triple $(ARCHIDEA_TRIPLE) --product Archidea
 	@scripts/bundle.sh $(CONFIG)
 
 dev: build ## Runs the debug build here in the terminal: its own profile (build/dev-data), the trace on; ⌃C quits

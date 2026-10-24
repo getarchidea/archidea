@@ -11,7 +11,7 @@ name="Chromium Framework"
 engine="$root/vendor/engine/$name.framework"
 out="$root/build"
 app="$out/Archidea.app"
-bin="$(swift build -c "$config" --show-bin-path)"
+bin="$(swift build -c "$config" --triple "${ARCHIDEA_TRIPLE:-arm64-apple-macosx}" --show-bin-path)"
 
 [ -x "$bin/Archidea" ] || { echo "error: no $bin/Archidea; build it first (make build)" >&2; exit 1; }
 [ -d "$engine" ] || "$root/scripts/fetch-engine.sh"
