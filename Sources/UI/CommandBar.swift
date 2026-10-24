@@ -32,6 +32,8 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     private var current: String?
     /// Set when editing from the sidebar's address: the bar opens in place over it, compact, like Arc.
     private var anchor: NSRect?
+    /// The start page's search field, when the bar opens from it: the bar takes its place, at its width.
+    private var over: NSRect?
 
     private struct Metrics {
         let fieldHeight: CGFloat, rowHeight: CGFloat, fontSize: CGFloat, glyph: CGFloat, radius: CGFloat
@@ -95,9 +97,18 @@ final class CommandBar: NSView, NSTextFieldDelegate {
 
     override var wantsUpdateLayer: Bool { true }
 
-    func show(in host: NSView, editing: Bool, current: String?, anchor: NSRect? = nil) {
+    /// Opens with `text` already typed (keys pressed on the start page).
+    func show(in host: NSView, typing text: String, over searchField: NSRect?) {
+        show(in: host, editing: false, current: nil, over: searchField)
+        field.stringValue = text
+        field.currentEditor()?.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+        refresh()
+    }
+
+    func show(in host: NSView, editing: Bool, current: String?, anchor: NSRect? = nil, over searchField: NSRect? = nil) {
         self.editing = editing
         self.anchor = anchor
+        over = anchor == nil ? searchField : nil
         controller?.history.refresh { [weak self] in
             guard let self, superview != nil, !field.stringValue.isEmpty else { return }
             refresh()
@@ -154,6 +165,9 @@ final class CommandBar: NSView, NSTextFieldDelegate {
             let x = max(4, anchor.minX - 4)
             let width = min(max(anchor.width + 8, 400), bounds.width - x - 8)
             shadowHost.frame = NSRect(x: x, y: anchor.maxY + 4 - height, width: width, height: height)
+        } else if let over {
+            let top = over.maxY + (m.fieldHeight - over.height) / 2
+            shadowHost.frame = NSRect(x: over.minX, y: top - height, width: over.width, height: height)
         } else {
             let width = min(660, bounds.width - 64)
             let top = bounds.height - max(60, bounds.height * 0.2)
@@ -403,42 +417,6 @@ private final class SuggestionRow: NSView {
 }
 
 /// What the page area shows when no tab is open.
-final class EmptyStateView: NSView {
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 12
-        for (keys, label) in [("⌘ T", L("empty.newTab")), ("⌘ L", L("empty.openLocation")), ("⌘ S", L("empty.toggleSidebar")),
-                              ("⌥⌘ →", L("empty.nextSpace")), ("⌘ D", L("empty.pin"))] {
-            stack.addArrangedSubview(Self.hint(keys, label))
-        }
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    private static func hint(_ keys: String, _ label: String) -> NSView {
-        let cap = KeyCap(keys)
-        cap.translatesAutoresizingMaskIntoConstraints = false
-        cap.widthAnchor.constraint(equalToConstant: 64).isActive = true
-        cap.heightAnchor.constraint(equalToConstant: 24).isActive = true
-        let text = NSTextField(labelWithString: label)
-        text.font = .systemFont(ofSize: 13)
-        text.textColor = .secondaryLabelColor
-        let row = NSStackView(views: [cap, text])
-        row.spacing = 14
-        row.alignment = .centerY
-        return row
-    }
-}
-
 final class KeyCap: NSView {
     private let keys: String
 

@@ -5,6 +5,10 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **Start page**: with no tab open, the window shows a search field, the sites you visit most (with their icons)
+  and the tabs you closed lately. Start typing anywhere and the address bar opens right over the field with
+  your letters in it; right-click a site to take it off. Private windows show no sites.
+
 - When an update check fails, Archidea says what happened in plain words (no connection to GitHub, a bad answer,
   an update that didn't verify) instead of the system's raw error.
 

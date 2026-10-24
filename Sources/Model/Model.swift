@@ -178,6 +178,8 @@ struct BrowserSettings: Codable, Equatable {
     var adBlock = false
     /// Where links from other apps open: a mini window of their own, or a tab in the browser window.
     var linksInMiniWindow = true
+    /// Sites taken off the start page.
+    var hiddenTopSites: [String] = []
 
     init() {}
 
@@ -191,6 +193,7 @@ struct BrowserSettings: Codable, Equatable {
         showFullURL = (try? c.decodeIfPresent(Bool.self, forKey: .showFullURL)) ?? defaults.showFullURL
         adBlock = (try? c.decodeIfPresent(Bool.self, forKey: .adBlock)) ?? defaults.adBlock
         linksInMiniWindow = (try? c.decodeIfPresent(Bool.self, forKey: .linksInMiniWindow)) ?? defaults.linksInMiniWindow
+        hiddenTopSites = (try? c.decodeIfPresent([String].self, forKey: .hiddenTopSites)) ?? defaults.hiddenTopSites
     }
 }
 

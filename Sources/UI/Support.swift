@@ -25,6 +25,8 @@ enum Theme {
     }
 
     static let settingsCard = dynamic(dark: .white.withAlphaComponent(0.05), light: .white.withAlphaComponent(0.7))
+    /// The start page's search field, on the page's own colour.
+    static let startField = dynamic(dark: .white.withAlphaComponent(0.06), light: .black.withAlphaComponent(0.035))
     static let keycap = dynamic(dark: .white.withAlphaComponent(0.08), light: .black.withAlphaComponent(0.05))
 }
 

@@ -10,7 +10,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     private let root = RootView()
     private let sidebar: SidebarView
     private let content = ContentView()
-    private let emptyState = EmptyStateView()
+    private let emptyState = StartPage()
     private lazy var commandBar = CommandBar(controller: self)
     private lazy var findBar = FindBar(controller: self)
 
@@ -184,6 +184,15 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
         content.addSubview(emptyState)
         content.emptyState = emptyState
+        emptyState.onSearch = { [weak self] in self?.showCommandBar(editing: false) }
+        emptyState.onOpen = { [weak self] url in self?.openInNewTab(url) }
+        emptyState.onReopen = { [weak self] index in self?.reopenClosedTab(at: index) }
+        emptyState.onHide = { [weak self] host in
+            guard let self else { return }
+            state.settings.hiddenTopSites.append(host)
+            store.setNeedsSave()
+            refreshStartPage()
+        }
         content.onLayout = { [weak self] in
             self?.layoutTab()
             self?.placeLoadingBar()
@@ -232,6 +241,18 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             }
             monitors += [keys].compactMap { $0 }
         }
+        // On the start page, typing goes straight into the address bar, which opens with the first letter in it.
+        let typed = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === window, !emptyState.isHidden, !commandBar.isOpen,
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                  !(window.firstResponder is NSTextView),
+                  let text = event.characters, !text.isEmpty,
+                  text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && $0.value < 0xF700 }),
+                  !text.trimmingCharacters(in: .whitespaces).isEmpty else { return event }
+            commandBar.show(in: root, typing: text, over: startSearchFrame)
+            return nil
+        }
+        monitors += [typed].compactMap { $0 }
         let moved = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
             self?.trackPointer(event)
             return event
@@ -361,7 +382,6 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     func showWindow() {
         window.makeKeyAndOrderFront(nil)
-        if activeItem == nil { DispatchQueue.main.async { self.showCommandBar(editing: false) } }
     }
 
     // MARK: selection
@@ -393,6 +413,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         }
         shownTab = tab
         emptyState.isHidden = tab != nil
+        if tab == nil { refreshStartPage() }
         sitePrompts.refresh()
         placeLoadingBar()
         loadingBar.show(loading: tab?.loading ?? false, progress: tab?.progress ?? 0, animated: false)
@@ -723,6 +744,25 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     var closedCount: Int { closedTabs.count }
 
+    /// The start page's contents, refreshed whenever it shows; history is read again if it's gone stale.
+    private func refreshStartPage() {
+        let fill = { [weak self] in
+            guard let self, !emptyState.isHidden else { return }
+            let sites = isPrivate ? [] : history.topSites(limit: 8, hidden: Set(state.settings.hiddenTopSites))
+            emptyState.show(sites: sites, closed: closedTabs.suffix(4).reversed().map { .init(url: $0.url, title: $0.title) })
+        }
+        fill()
+        if !isPrivate { history.refresh(then: fill) }
+    }
+
+    /// One of the start page's recently closed tabs, counted from the newest.
+    func reopenClosedTab(at index: Int) {
+        let position = closedTabs.count - 1 - index
+        guard closedTabs.indices.contains(position) else { return }
+        closedTabs.append(closedTabs.remove(at: position))
+        reopenClosedTab()
+    }
+
     func reopenClosedTab() {
         guard let last = closedTabs.popLast() else { return }
         if let owner = state.spaces.first(where: { $0.id == last.spaceID }), owner !== space { switchSpace(to: owner) }
@@ -763,12 +803,18 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         store.setNeedsSave()
     }
 
+    /// The start page's search field in the root view, while the start page is up.
+    private var startSearchFrame: NSRect? {
+        emptyState.isHidden ? nil : root.convert(emptyState.searchField.bounds, from: emptyState.searchField)
+    }
+
     func showCommandBar(editing: Bool) {
         let sidebarVisible = !state.sidebarHidden || overlayShown
         let anchor = editing && sidebarVisible && !contentFullscreen
             ? root.convert(sidebar.addressAnchor.bounds, from: sidebar.addressAnchor) : nil
         if anchor == nil, overlayShown { setOverlay(false) }
-        commandBar.show(in: root, editing: editing, current: editing ? (activeTab?.url ?? activeItem?.url) : nil, anchor: anchor)
+        commandBar.show(in: root, editing: editing, current: editing ? (activeTab?.url ?? activeItem?.url) : nil, anchor: anchor,
+                        over: startSearchFrame)
     }
 
     func commandBarDidHide() {

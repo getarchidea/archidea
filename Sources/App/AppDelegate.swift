@@ -103,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CardsDemo.runIfRequested(controller)
         RenameDemo.runIfRequested(controller)
         MiniDemo.runIfRequested(self)
+        StartDemo.runIfRequested(controller)
         #endif
     }
 

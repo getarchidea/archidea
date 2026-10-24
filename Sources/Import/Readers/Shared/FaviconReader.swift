@@ -59,11 +59,13 @@ public enum FaviconReader {
     return picker.icons
   }
 
-  /// Keeps the best bitmap per wanted page and per site.
+  /// Keeps the best bitmap per wanted page and, per site, the icon most of its pages use (a page reached through
+  /// a sign-in can carry the sign-in service's icon; one such page mustn't give the whole site that icon).
   private struct Picker {
     let pages: Set<String>
     private var byPage: [String: (icon: Icon, width: Int)] = [:]
-    private var bySite: [String: (icon: Icon, width: Int)] = [:]
+    /// Per site, per icon URL: how many pages use it, and its best bitmap.
+    private var bySite: [String: [String: (pages: Int, icon: Icon, width: Int)]] = [:]
 
     init(pages: Set<String>) { self.pages = pages }
 
@@ -76,14 +78,22 @@ public enum FaviconReader {
         byPage[page] = (Icon(page: page, icon: icon, data: data), width)
       }
       let site = "\(scheme)://\(host)/"
-      if let current = bySite[site] {
-        guard Self.score(width) > Self.score(current.width) else { return }
-      } else if bySite.count >= FaviconReader.siteLimit {
-        return
+      guard bySite[site] != nil || bySite.count < FaviconReader.siteLimit else { return }
+      var icons = bySite[site, default: [:]]
+      if var known = icons[icon] {
+        known.pages += 1
+        if Self.score(width) > Self.score(known.width) { (known.icon, known.width) = (Icon(page: site, icon: icon, data: data), width) }
+        icons[icon] = known
+      } else {
+        icons[icon] = (1, Icon(page: site, icon: icon, data: data), width)
       }
-      bySite[site] = (Icon(page: site, icon: icon, data: data), width)
+      bySite[site] = icons
     }
 
-    var icons: [Icon] { byPage.values.map(\.icon) + bySite.values.map(\.icon) }
+    var icons: [Icon] {
+      byPage.values.map(\.icon) + bySite.values.compactMap { icons in
+        icons.values.max { ($0.pages, Self.score($0.width)) < ($1.pages, Self.score($1.width)) }?.icon
+      }
+    }
   }
 }
