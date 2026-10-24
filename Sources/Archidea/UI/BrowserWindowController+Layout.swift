@@ -31,11 +31,12 @@ extension BrowserWindowController {
         applySidebarMode(animated: true)
     }
 
-    /// The slid-out sidebar stays while something of it is in use: a rename, its menu, a popover or sheet it opened
-    /// (an icon picker, the theme editor). The pointer wandering off doesn't put it away then.
+    /// The slid-out sidebar stays while something of it is in use: a rename, its menu, the address bar opened from its
+    /// address, a popover or sheet it opened (an icon picker, the theme editor). The pointer wandering off doesn't put
+    /// it away then.
     private var overlayHeld: Bool {
         // Only popovers among the child windows: the engine keeps child windows of its own (the link status bubble).
-        sidebar.isBusy || window.attachedSheet != nil
+        sidebar.isBusy || commandBarIsOpen || window.attachedSheet != nil
             || (window.childWindows ?? []).contains { $0.isVisible && NSStringFromClass(type(of: $0)).contains("Popover") }
     }
 
