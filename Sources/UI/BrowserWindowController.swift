@@ -35,6 +35,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
     private lazy var sitePrompts = SitePrompts(host: content, activeTab: { [weak self] in self?.shownTab })
     private var devToolsViews: [ObjectIdentifier: NSView] = [:]
+    /// NSEvent hands monitors back as opaque tokens (`Any`); they only go back to removeMonitor.
     private var monitors: [Any] = []
     /// Notification observers, removed with the window (a private window comes and goes; the main one lives on).
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
@@ -1135,7 +1136,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                               dismissed: { [weak tab] in tab?.resolvePasswordPrompt(decline, username: nil, password: nil) }))
     }
 
-    private func observe(_ name: Notification.Name, object: Any?, in center: NotificationCenter = .default,
+    private func observe(_ name: Notification.Name, object: NSWindow?, in center: NotificationCenter = .default,
                          _ block: @escaping (Notification) -> Void) {
         observers.append((center, center.addObserver(forName: name, object: object, queue: .main, using: block)))
     }
