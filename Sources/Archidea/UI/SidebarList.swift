@@ -138,7 +138,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let item = space.row(of: side)
         var parent = space.location(of: item)?.parent
         while let folder = parent {
-            if !outline.isItemExpanded(folder) { outline.animator().expandItem(folder) }
+            if !outline.isItemExpanded(folder) { Self.animateRows { outline.animator().expandItem(folder) } }
             parent = space.location(of: folder)?.parent
         }
         // Before the window has its size the list is a few points tall, and scrolling a row "into view" there
@@ -258,7 +258,19 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func toggleFolder(_ folder: SidebarItem) {
-        if outline.isItemExpanded(folder) { outline.animator().collapseItem(folder) } else { outline.animator().expandItem(folder) }
+        Self.animateRows {
+            if outline.isItemExpanded(folder) { outline.animator().collapseItem(folder) } else { outline.animator().expandItem(folder) }
+        }
+    }
+
+    /// A folder opens and closes quickly, starting fast and settling: AppKit's own takes about a third of a second and
+    /// eases in, which read as a pause before anything moved.
+    static func animateRows(_ changes: () -> Void) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+            changes()
+        }
     }
 
     /// A middle click closes the tab under it: in a split, that side, as its close button does.
