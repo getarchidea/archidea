@@ -88,6 +88,7 @@ extension BrowserWindowController {
     func sidebarCanSplit(_ item: SidebarItem) -> Bool { canSplit(with: item.id) }
     func sidebarSplit(_ item: SidebarItem) { split(with: item.id) }
     func sidebarSeparate(_ split: SidebarItem) { separate(split) }
+    func sidebarClosePane(_ item: SidebarItem) { closePane(item) }
     func sidebarSwapSides(_ split: SidebarItem) { swapSides(split) }
     func sidebarDragBegan() { dragFromSidebarBegan() }
     func sidebarDragEnded() { dragFromSidebarEnded() }

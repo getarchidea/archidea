@@ -409,6 +409,8 @@
 "split.separate" = "Separate Tabs";
 "split.swap" = "Swap Sides";
 "split.close" = "Close Split View";
+"split.addLeft" = "Add left split";
+"split.addRight" = "Add right split";
 "menu.splitView" = "New Split View";
 "start.hide" = "Remove from Start Page";
 "update.downloading" = "Downloading Archidea %@";

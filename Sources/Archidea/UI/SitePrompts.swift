@@ -221,8 +221,10 @@ final class PromptCard: NSView {
     /// In the page's top left corner, clear of the sidebar when it's slid out over the page.
     func place() {
         guard let host = superview else { return }
+        // On the page that asks: in a split, the one with the keyboard; clear of a slid-out sidebar over it.
+        let page = (host as? ContentView)?.pageFrame ?? host.bounds
         let clearance = (host as? ContentView)?.sidebarClearance ?? 0
-        frame.origin = NSPoint(x: 12 + clearance, y: host.bounds.height - frame.height - 12)
+        frame.origin = NSPoint(x: max(page.minX, clearance) + 12, y: page.maxY - frame.height - 12)
     }
 
     override func layout() {

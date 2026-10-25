@@ -261,10 +261,10 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if outline.isItemExpanded(folder) { outline.animator().collapseItem(folder) } else { outline.animator().expandItem(folder) }
     }
 
-    /// A middle click closes the tab under it: in a split, that side.
+    /// A middle click closes the tab under it: in a split, that side, as its close button does.
     private func middleClicked(_ row: Int) {
         guard let item = outline.item(atRow: row) as? SidebarItem, !item.isFolder else { return }
-        delegate?.sidebarClose(item.isSplit ? side(of: item, row: row) : item)
+        if item.isSplit { delegate?.sidebarClosePane(side(of: item, row: row)) } else { delegate?.sidebarClose(item) }
     }
 
     @objc private func expansionChanged(_ note: Notification) {
@@ -350,9 +350,12 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                        icons: sides.map { delegate?.sidebarFavicon(for: $0) },
                        loaded: loaded.map { !pinned || $0 },
                        loading: sides.map { delegate?.sidebarIsLoading($0) ?? false },
-                       focused: sides.firstIndex { $0.id == selectedID })
-        cell.setCloseStyle(pinned: pinned, loaded: loaded.contains(true))
-        cell.onClose = { [weak self] in self?.delegate?.sidebarClose(split) }
+                       focused: sides.firstIndex { $0.id == selectedID },
+                       closeTip: pinned ? L("tab.removePinned.tip") : L("tab.close"))
+        cell.onClose = { [weak self] index in
+            guard split.children.indices.contains(index) else { return }
+            self?.delegate?.sidebarClosePane(split.children[index])
+        }
         return cell
     }
 
@@ -491,10 +494,12 @@ final class SidebarScroll: ThinScrollView {
 }
 
 extension SidebarList {
-    /// A split's menu: separate it, swap its sides, pin it, move it, close it.
+    /// A split's menu: separate it, swap the sides of a two-tab one, pin it, move it, close it.
     fileprivate func splitMenu(_ split: SidebarItem, into menu: NSMenu) {
         menu.addItem(ClosureMenuItem(L("split.separate")) { [weak self] in self?.delegate?.sidebarSeparate(split) })
-        menu.addItem(ClosureMenuItem(L("split.swap")) { [weak self] in self?.delegate?.sidebarSwapSides(split) })
+        if split.children.count == 2 {
+            menu.addItem(ClosureMenuItem(L("split.swap")) { [weak self] in self?.delegate?.sidebarSwapSides(split) })
+        }
         menu.addItem(.separator())
         let pinned = space.isPinned(split)
         menu.addItem(ClosureMenuItem(pinned ? L("tab.unpin") : L("tab.pin")) { [weak self] in self?.delegate?.sidebarTogglePin(split) })

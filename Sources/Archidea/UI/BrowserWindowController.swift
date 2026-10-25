@@ -40,11 +40,19 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                                              arrive: { [weak self] target in self?.switchSpace(to: target, slide: false) })
 
     private(set) var shownTab: ArdiaCoreTab?
-    /// The other side of the split in front, beside `shownTab` (the side with the keyboard).
-    private(set) var pairedTab: ArdiaCoreTab?
-    private let divider = SplitDivider()
+    /// The other pages of the split in front, beside `shownTab` (the one with the keyboard).
+    private(set) var otherPanes: [ArdiaCoreTab] = []
+    /// The split's pages as laid out, left to right; empty while one page has the window.
+    private var paneOrder: [ArdiaCoreTab] = []
+    /// A split's pages each sit on a card of their own, with its shadow, the dividers between them and a ring round
+    /// the one with the keyboard.
+    private let paneCards = (0..<SidebarItem.splitLimit).map { _ in PaneCard() }
+    private let paneShadows = (0..<SidebarItem.splitLimit).map { _ in PageShadow() }
+    private let dividers = (1..<SidebarItem.splitLimit).map { _ in SplitDivider() }
     private let paneRing = PaneRing()
     private let splitDrop = SplitDropZone()
+    /// No page of a split gets narrower than this by dragging a divider, while the window has room.
+    private static let minPaneWidth: CGFloat = 200
     var contentFullscreen = false
     var enteredWindowFullscreen = false
     /// The thin bar across the top of the page while it loads.
@@ -236,15 +244,20 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         content.emptyState = emptyState
         elsewherePage.isHidden = true
         content.addSubview(elsewherePage)
-        for view in [divider, paneRing, splitDrop] as [NSView] {
+        // Shadows under the cards, the dividers and the ring over them.
+        let splitViews: [[NSView]] = [paneShadows, paneCards, dividers, [paneRing, splitDrop]]
+        for view in splitViews.joined() {
             view.isHidden = true
             content.addSubview(view)
         }
-        divider.onDrag = { [weak self] x in self?.resizeSplit(to: x) }
-        divider.onEnd = { [weak self] in self?.splitResized() }
-        divider.onReset = { [weak self] in self?.resizeSplit(to: nil) }
+        for (index, divider) in dividers.enumerated() {
+            divider.onDrag = { [weak self] x in self?.resizeSplit(at: index, to: x) }
+            divider.onEnd = { [weak self] in self?.splitResized() }
+            divider.onReset = { [weak self] in self?.evenSplit() }
+        }
+        splitDrop.panes = { [weak self] in self?.paneFrames ?? [] }
         splitDrop.accepts = { [weak self] id in self?.canSplit(with: id) ?? false }
-        splitDrop.onDrop = { [weak self] id, leading in self?.split(with: id, leading: leading) }
+        splitDrop.onDrop = { [weak self] id, pane, before in self?.dropped(id, beside: pane, before: before) }
         elsewherePage.onShowWindow = { [weak self] in
             guard let self, let item = shownElsewhere else { return }
             group.window(holding: item)?.showWindow()
@@ -298,8 +311,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                 return event
             }
             if overlayShown, !sidebar.frame.insetBy(dx: -6, dy: 0).contains(root.convert(event.locationInWindow, from: nil)) { setOverlay(false) }
-            if let paired = pairedTab, !paired.view.isHidden, paired.view.frame.contains(content.convert(event.locationInWindow, from: nil)) {
-                DispatchQueue.main.async { self.focusPane(paired) }
+            if let pane = otherPanes.first(where: { !$0.view.isHidden && $0.view.convert($0.view.bounds, to: nil).contains(event.locationInWindow) }) {
+                DispatchQueue.main.async { self.focusPane(pane) }
             }
             return WindowDrag.handle(event, in: window) ? nil : event
         }
@@ -382,8 +395,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             applyTheme(of: space)
             sidebar.reload()
             refreshFront()
-            // A split in front may have changed there (separated, closed on one side, resized).
-            if let tab = shownTab, shownSplit != nil || pairedTab != nil { show(tab) }
+            // A split in front may have changed there (separated, a page closed or added, resized).
+            if let tab = shownTab, shownSplit != nil || !otherPanes.isEmpty { show(tab) }
         }
     }
 
@@ -423,7 +436,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// Whether this window has `item`'s page in front, on screen.
     func isShowing(_ item: SidebarItem) -> Bool {
         guard window.isVisible, !window.isMiniaturized else { return false }
-        return [shownTab, pairedTab].contains { $0.map { runtime.item(for: $0) === item } ?? false }
+        return ([shownTab].compactMap { $0 } + otherPanes).contains { runtime.item(for: $0) === item }
     }
 
     /// Whether this window has `item` in front and waits for its page, which another window shows.
@@ -433,11 +446,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// it was in front.
     func giveUp(_ item: SidebarItem) -> ArdiaCoreTab? {
         guard let tab = runtime.liveTab(for: item) else { return nil }
-        if tab === pairedTab {
-            // The other side of the split in front leaves: the side here has the page to itself.
+        if let index = otherPanes.firstIndex(where: { $0 === tab }) {
+            // Another page of the split in front leaves: the rest share the window.
             tab.view.isHidden = true
             tab.noteShown(byHost: false)
-            pairedTab = nil
+            otherPanes.remove(at: index)
             layoutTab()
         }
         let wasShown = tab === shownTab
@@ -463,8 +476,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     func unloadOwn(_ item: SidebarItem) {
         let live = runtime.liveTab(for: item)
         let inFront = shownElsewhere === item || (live != nil && live === shownTab)
-        if live != nil, live === pairedTab {
-            pairedTab = nil
+        if let live, let index = otherPanes.firstIndex(where: { $0 === live }) {
+            otherPanes.remove(at: index)
             layoutTab()
         }
         if live != nil { unloadHere(item) }
@@ -538,8 +551,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     func show(_ tab: ArdiaCoreTab?) {
         shownElsewhere = nil
         elsewherePage.isHidden = true
-        let paired = tab.flatMap(otherSide(of:))
-        for old in [shownTab, pairedTab].compactMap({ $0 }) where old !== tab && old !== paired {
+        let others = tab.map { panesBeside($0) } ?? []
+        for old in [shownTab].compactMap({ $0 }) + otherPanes where old !== tab && !others.contains(where: { $0 === old }) {
             old.view.isHidden = true
             old.devToolsView?.isHidden = true
             old.noteShown(byHost: false)
@@ -547,7 +560,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         }
         if let old = shownTab, old !== tab { findBar.close() }
         shownTab = tab
-        pairedTab = paired
+        otherPanes = others
         updateWindowTitle()
         emptyState.isHidden = tab != nil
         if tab == nil { refreshStartPage() }
@@ -560,8 +573,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             return
         }
         if let item = runtime.item(for: tab) { sidebar.reloadItem(item) }
-        for page in [tab, paired].compactMap({ $0 }) {
-            if page.view.superview !== content { content.addSubview(page.view, positioned: .below, relativeTo: nil) }
+        for page in [tab] + others {
             page.view.isHidden = false
             page.noteShown(byHost: true)
         }
@@ -569,43 +581,87 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         sidebar.updateAddress(tab)
     }
 
-    /// The page, or a split's two side by side with the divider between them and a ring round the side with the
-    /// keyboard. A page in full screen has the whole of it.
+    /// The page, or a split's pages side by side, each on its card, with a ring round the one with the keyboard.
+    /// A page in full screen has the whole of it.
     func layoutTab() {
-        guard let tab = shownTab else {
-            divider.isHidden = true
-            paneRing.isHidden = true
+        guard let tab = shownTab else { return layOutPanes([]) }
+        let split = contentFullscreen ? nil : shownSplit
+        // The split's pages this window has, left to right, with their shares of the width.
+        let shown = [tab] + otherPanes
+        let panes: [(tab: ArdiaCoreTab, share: Double)] = split.map { split in
+            zip(split.children, split.paneWidths).compactMap { child, share in
+                shown.first { runtime.item(for: $0) === child }.map { (tab: $0, share: share) }
+            }
+        } ?? []
+        guard panes.count > 1 else {
+            layOutPanes([])
+            // In full screen the other pages step out of the way, and come back after.
+            for page in otherPanes { page.view.isHidden = true }
+            place(tab, in: content.bounds, on: content)
             return
         }
-        let bounds = content.bounds
-        guard let paired = pairedTab, !contentFullscreen, let split = shownSplit, let first = split.children.first else {
-            divider.isHidden = true
-            paneRing.isHidden = true
-            // In full screen the other side steps out of the way, and comes back after.
-            pairedTab?.view.isHidden = true
-            place(tab, in: bounds)
-            return
-        }
-        paired.view.isHidden = false
-        let gap = SplitDivider.width
-        let leftWidth = floor((bounds.width - gap) * CGFloat(split.splitRatio ?? 0.5))
-        let left = NSRect(x: 0, y: 0, width: leftWidth, height: bounds.height)
-        let right = NSRect(x: leftWidth + gap, y: 0, width: bounds.width - leftWidth - gap, height: bounds.height)
-        let tabOnLeft = runtime.item(for: tab) === first
-        place(tab, in: tabOnLeft ? left : right)
-        place(paired, in: tabOnLeft ? right : left)
-        divider.frame = NSRect(x: leftWidth, y: 0, width: gap, height: bounds.height)
-        divider.isHidden = false
-        paneRing.frame = tabOnLeft ? left : right
-        paneRing.isHidden = false
+        layOutPanes(panes)
     }
 
-    private func place(_ tab: ArdiaCoreTab, in frame: NSRect) {
+    private func layOutPanes(_ panes: [(tab: ArdiaCoreTab, share: Double)]) {
+        paneOrder = panes.map(\.tab)
+        content.showsCard = panes.isEmpty
+        let total = panes.map(\.share).reduce(0, +)
+        let frames = Self.cardFrames(for: panes.map { $0.share / total }, in: content.bounds)
+        for (index, card) in paneCards.enumerated() {
+            card.isHidden = index >= panes.count
+            paneShadows[index].isHidden = card.isHidden
+            guard !card.isHidden else { continue }
+            card.frame = frames[index]
+            paneShadows[index].frame = frames[index]
+            panes[index].tab.view.isHidden = false
+            place(panes[index].tab, in: card.bounds, on: card)
+        }
+        for (index, divider) in dividers.enumerated() {
+            divider.isHidden = index >= panes.count - 1
+            guard !divider.isHidden else { continue }
+            divider.frame = NSRect(x: frames[index].maxX, y: content.bounds.minY, width: frames[index + 1].minX - frames[index].maxX,
+                                   height: content.bounds.height)
+        }
+        let active = panes.firstIndex { $0.tab === shownTab }
+        paneRing.isHidden = active == nil
+        content.activeFrame = active.map { frames[$0] }
+        if let active {
+            paneRing.frame = frames[active].insetBy(dx: -PaneRing.outset, dy: -PaneRing.outset)
+            paneRing.needsDisplay = true
+        }
+    }
+
+    /// Cards side by side across `bounds`, a divider's gap between each two, each as wide as its share of the rest.
+    private static func cardFrames(for shares: [Double], in bounds: NSRect) -> [NSRect] {
+        let gap = SplitDivider.gap
+        let room = max(0, bounds.width - gap * CGFloat(shares.count - 1))
+        var x = bounds.minX
+        return shares.enumerated().map { index, share in
+            let width = index == shares.count - 1 ? bounds.maxX - x : floor(room * CGFloat(share))
+            defer { x += width + gap }
+            return NSRect(x: x, y: bounds.minY, width: max(0, width), height: bounds.height)
+        }
+    }
+
+    /// The pages' frames, left to right: the split's cards, or the one page.
+    private var paneFrames: [NSRect] {
+        paneOrder.isEmpty ? [content.bounds] : paneCards.prefix(paneOrder.count).map(\.frame)
+    }
+
+    /// Puts the page (and its docked DevTools) in `frame` of `container`: the page's area, or a split's card.
+    private func place(_ tab: ArdiaCoreTab, in frame: NSRect, on container: NSView) {
+        if tab.view.superview !== container {
+            // Moving the page takes the keyboard from it; it gets it back.
+            let focused = (window.firstResponder as? NSView)?.isDescendant(of: tab.view) == true
+            container.addSubview(tab.view, positioned: .below, relativeTo: nil)
+            if focused { tab.focus() }
+        }
         if let devTools = tab.devToolsView {
             var devFrame = NSRect.zero, pageFrame = NSRect.zero
             tab.devToolsLayout(for: frame.size, devTools: &devFrame, page: &pageFrame)
             // Below the page: the docked DevTools view can span the page's area too.
-            if devTools.superview !== content { content.addSubview(devTools, positioned: .below, relativeTo: tab.view) }
+            if devTools.superview !== container { container.addSubview(devTools, positioned: .below, relativeTo: tab.view) }
             devTools.isHidden = false
             devTools.frame = devFrame.offsetBy(dx: frame.minX, dy: frame.minY)
             tab.view.frame = pageFrame.offsetBy(dx: frame.minX, dy: frame.minY)
@@ -625,28 +681,44 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         return state.space(containing: item)?.split(containing: item)
     }
 
-    /// The other side's page when `tab` is one side of a split, opened (or brought from another window) to show
+    /// The other pages of the split `tab` is in, left to right, opened (or brought from another window) to show
     /// beside it.
-    private func otherSide(of tab: ArdiaCoreTab) -> ArdiaCoreTab? {
-        guard let item = runtime.item(for: tab), let split = state.space(containing: item)?.split(containing: item),
-              let other = split.children.first(where: { $0 !== item }) else { return nil }
-        group.take(other, into: self)
-        return runtime.ensureTab(for: other)
+    private func panesBeside(_ tab: ArdiaCoreTab) -> [ArdiaCoreTab] {
+        guard let item = runtime.item(for: tab), let split = state.space(containing: item)?.split(containing: item) else { return [] }
+        return split.children.filter { $0 !== item }.map { other in
+            group.take(other, into: self)
+            return runtime.ensureTab(for: other)
+        }
     }
 
-    /// The keyboard went to the other side (a press there, Tab out of a field): it's the side in front now.
+    /// The keyboard went to another page of the split (a press there, Tab out of a field): it's the one in front now.
     func focusPane(_ tab: ArdiaCoreTab) {
-        guard tab === pairedTab, let item = runtime.item(for: tab) else { return }
+        guard otherPanes.contains(where: { $0 === tab }), let item = runtime.item(for: tab) else { return }
         select(item, focusPage: false, cause: "split-side")
     }
 
-    /// The divider dragged to `x` in the page's area; nil puts it back in the middle.
-    private func resizeSplit(to x: CGFloat?) {
-        guard let split = shownSplit else { return }
-        let width = content.bounds.width - SplitDivider.width
-        split.splitRatio = x.map { Double(min(0.8, max(0.2, ($0 - SplitDivider.width / 2) / max(width, 1)))) }
+    /// Divider `index` (between pages `index` and `index + 1`) dragged to `x` in the pages' area: those two share
+    /// their width differently, neither going narrower than `minPaneWidth` while there's room for that.
+    private func resizeSplit(at index: Int, to x: CGFloat) {
+        guard let split = shownSplit, paneOrder.count == split.children.count, index + 1 < paneOrder.count else { return }
+        let room = content.bounds.width - SplitDivider.gap * CGFloat(paneOrder.count - 1)
+        guard room > 0 else { return }
+        var shares = split.paneWidths
+        let pair = shares[index] + shares[index + 1]
+        let least = min(pair / 2, Double(Self.minPaneWidth / room))
+        let share = Double((x - SplitDivider.gap / 2 - paneCards[index].frame.minX) / room)
+        shares[index] = min(max(share, least), pair - least)
+        shares[index + 1] = pair - shares[index]
+        split.splitWidths = shares
         layoutTab()
-        if x == nil { splitResized() }
+    }
+
+    /// A divider double-clicked: every page of the split has an even share again.
+    private func evenSplit() {
+        guard let split = shownSplit else { return }
+        split.splitWidths = nil
+        layoutTab()
+        splitResized()
     }
 
     private func splitResized() {
@@ -654,35 +726,49 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         group.sidebarChanged(by: self)
     }
 
-    /// A tab can open beside the one in front when both are tabs of their own and neither is in a split.
+    /// Whether `item` can have another tab beside it: it's in no split, or its split has room.
+    private func hasRoom(beside item: SidebarItem) -> Bool {
+        space.split(containing: item).map { $0.children.count < SidebarItem.splitLimit } ?? true
+    }
+
+    /// A tab can open beside the page in front when it's a tab of its own, not in a split: beside a tab of its own
+    /// it makes a split, beside a split's page it joins that split while there's room.
     func canSplit(with id: UUID) -> Bool {
-        guard let front = activeItem, front.isTab, front.id != id, space.split(containing: front) == nil,
+        guard let front = activeItem, front.isTab, front.id != id, hasRoom(beside: front),
               let item = space.find(id), item.isTab, space.split(containing: item) == nil else { return false }
         return true
     }
 
-    /// `id`'s tab opens beside the tab in front, on the left when `leading`, and takes the keyboard.
-    func split(with id: UUID, leading: Bool = false) {
-        guard canSplit(with: id), let front = activeItem, let item = space.find(id) else { return }
-        guard space.makeSplit(front, with: item, secondFirst: leading) != nil else { return }
-        Trace.log("split: \(front.traceName) with \(item.traceName)")
+    /// `id`'s tab opens beside `anchor` (the page in front, or another page of its split), on its left when
+    /// `before`, and takes the keyboard.
+    func split(with id: UUID, beside anchor: SidebarItem? = nil, before: Bool = false) {
+        guard canSplit(with: id), let anchor = anchor ?? activeItem, let item = space.find(id) else { return }
+        guard space.makeSplit(anchor, with: item, before: before) != nil else { return }
+        Trace.log("split: \(item.traceName) beside \(anchor.traceName)")
         reloadSidebar()
         store.setNeedsSave()
         select(item, cause: "split-open")
     }
 
-    /// ⌥⌘\: the address bar opens, and what it opens goes beside the tab in front.
+    /// A tab let go over the pages: beside the page at `pane` (left to right), on its left when `before`.
+    private func dropped(_ id: UUID, beside pane: Int, before: Bool) {
+        let anchors = paneOrder.isEmpty ? [activeItem].compactMap { $0 } : paneOrder.compactMap { runtime.item(for: $0) }
+        guard anchors.indices.contains(pane) else { return }
+        split(with: id, beside: anchors[pane], before: before)
+    }
+
+    /// ⌥⌘\: the address bar opens, and what it opens goes beside the page in front.
     func splitWithNewTab() {
-        guard let front = activeItem, front.isTab, space.split(containing: front) == nil else {
+        guard let front = activeItem, front.isTab, hasRoom(beside: front) else {
             return showCommandBar(editing: false)
         }
         showCommandBar(editing: false)
         commandBar.opensBeside = true
     }
 
-    /// A new tab for `input`, beside the tab in front (as a split) when that can be, else a tab of its own.
+    /// A new tab for `input`, beside the page in front (in a split) when that can be, else a tab of its own.
     func openBeside(_ input: String) {
-        guard let front = activeItem, front.isTab, space.split(containing: front) == nil else { return openInNewTab(input) }
+        guard let front = activeItem, front.isTab, hasRoom(beside: front) else { return openInNewTab(input) }
         let item = SidebarItem(tab: URLInput.resolve(input))
         guard space.makeSplit(front, with: item) != nil else { return openInNewTab(input) }
         reloadSidebar()
@@ -690,7 +776,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         select(item, cause: "split-new-tab")
     }
 
-    /// The split's two tabs go back to being tabs of their own, where it was; the side in front stays in front.
+    /// The split's tabs go back to being tabs of their own, where it was; the one in front stays in front.
     func separate(_ split: SidebarItem) {
         guard split.isSplit, let owner = state.space(containing: split) else { return }
         owner.separate(split)
@@ -700,19 +786,23 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         if let tab = shownTab { show(tab) }
     }
 
-    /// A tab dragged out of the sidebar can go beside the page in front: the page shows where it would land.
+    /// A tab dragged out of the sidebar can go beside the pages in front: they show where it would land.
     func dragFromSidebarBegan() {
-        guard shownTab != nil, let front = activeItem, front.isTab, space.split(containing: front) == nil else { return }
+        guard shownTab != nil, let front = activeItem, front.isTab, hasRoom(beside: front) else { return }
+        splitDrop.reset()
         splitDrop.frame = content.bounds
         splitDrop.isHidden = false
     }
 
-    func dragFromSidebarEnded() { splitDrop.isHidden = true }
+    func dragFromSidebarEnded() {
+        splitDrop.isHidden = true
+        splitDrop.reset()
+    }
 
     func swapSides(_ split: SidebarItem) {
         guard split.isSplit, split.children.count == 2 else { return }
         split.children.reverse()
-        split.splitRatio = split.splitRatio.map { 1 - $0 }
+        split.splitWidths?.reverse()
         reloadSidebar()
         store.setNeedsSave()
         layoutTab()
@@ -792,8 +882,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// takes it out of the list (⇧⌘T brings it back).
     /// `remembering` puts it on the reopen-closed-tab stack; a tab that only fetched a download isn't worth reopening.
     func close(_ item: SidebarItem, remembering: Bool = true) {
-        // One side of a Today split closes, and the split gives way to the other side; a pinned split closes as one,
-        // like a pin.
+        // One page of a Today split closes and the others keep the split (one left alone takes its place); a pinned
+        // split closes as one, like a pin.
         if let split = space.split(containing: item) {
             if space.isPinned(split) { return close(split, remembering: remembering) }
             return closeSide(item, of: split, remembering: remembering)
@@ -818,17 +908,25 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         if let neighbor { select(neighbor, cause: "close-neighbor") }
     }
 
-    /// One side of a Today split goes: the other side takes the split's place, with the keyboard if it was there.
+    /// A split's page closes from its own button in the sidebar: it leaves the split, pinned or not, and ⇧⌘T brings
+    /// it back. ⌘W on a pinned split's page closes the split, like a pin (`close`).
+    func closePane(_ item: SidebarItem) {
+        guard let split = space.split(containing: item) else { return close(item) }
+        closeSide(item, of: split, remembering: true)
+    }
+
+    /// One page of a split goes: the others keep the split (one left alone takes its place), and the page beside it
+    /// takes the keyboard if it had it.
     private func closeSide(_ item: SidebarItem, of split: SidebarItem, remembering: Bool) {
-        let other = split.children.first { $0 !== item }
-        let wasActive = split.children.contains { $0 === activeItem }
+        let next = split.nextPane(after: item)
+        let wasActive = item === activeItem
         unloadTab(item)
         if remembering { state.remember(item) }
         space.remove(item)
         lastSide[split.id] = nil
         reloadSidebar()
         store.setNeedsSave()
-        if wasActive, let other { select(other, cause: "split-side-closed") }
+        if wasActive, let next { select(next, cause: "split-side-closed") } else if let tab = shownTab { show(tab) }
     }
 
     /// Takes a tab (or a pin, open or not, or a split) out of the sidebar; ⇧⌘T brings it back, a pin to its place.

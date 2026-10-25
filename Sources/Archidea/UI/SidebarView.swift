@@ -39,6 +39,8 @@ protocol SidebarViewDelegate: AnyObject {
     func sidebarCanSplit(_ item: SidebarItem) -> Bool
     func sidebarSplit(_ item: SidebarItem)
     func sidebarSeparate(_ split: SidebarItem)
+    /// A split's tab closes from its own button: it leaves the split.
+    func sidebarClosePane(_ item: SidebarItem)
     func sidebarSwapSides(_ split: SidebarItem)
     func sidebarDragBegan()
     func sidebarDragEnded()
