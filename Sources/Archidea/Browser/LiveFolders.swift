@@ -43,8 +43,8 @@ final class LiveFolders {
         var request = Self.request(url)
         if let etag = feed.etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         if let modified = feed.lastModified { request.setValue(modified, forHTTPHeaderField: "If-Modified-Since") }
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
-            DispatchQueue.main.async {
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 reading.remove(folder.id)
                 let http = response as? HTTPURLResponse

@@ -42,7 +42,7 @@ final class SiteControls: NSViewController {
         stack.spacing = 10
         stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
 
-        var tiles = [
+        var actionTiles = [
             ActionTile(symbol: "square.and.arrow.up", tip: L("site.share")) { [weak self] tile in self?.share(from: tile) },
             ActionTile(symbol: "link", tip: L("site.copyLink")) { [weak self] _ in self?.copyLink() },
             ActionTile(symbol: "magnifyingglass", tip: L("site.find")) { [weak self] _ in self?.close { $0.showFind() } },
@@ -50,11 +50,11 @@ final class SiteControls: NSViewController {
         ]
         if controller?.canFollow(tab.url) == true {
             let address = tab.url
-            tiles.insert(ActionTile(symbol: "dot.radiowaves.left.and.right", tip: L("live.follow")) { [weak self] _ in
+            actionTiles.insert(ActionTile(symbol: "dot.radiowaves.left.and.right", tip: L("live.follow")) { [weak self] _ in
                 self?.close { $0.follow(address) }
             }, at: 2)
         }
-        let actions = NSStackView(views: tiles)
+        let actions = NSStackView(views: actionTiles)
         actions.distribution = .fillEqually
         actions.spacing = 8
         add(actions, to: stack)
