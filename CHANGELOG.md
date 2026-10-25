@@ -5,6 +5,10 @@ under *What's new*.
 
 ## [Unreleased]
 
+- The back and forward buttons list the tab's history: hold one, or right-click it, and pick a page; with ⌘ it opens
+  in a new tab instead. A middle click or ⌘-click on the button opens the previous (or next) page in a new tab behind
+  the one you're on.
+
 ## [0.3.0] - 2026-10-25
 
 - **Split view**: up to four tabs side by side in one window, one row in the sidebar. Drag a tab from the sidebar

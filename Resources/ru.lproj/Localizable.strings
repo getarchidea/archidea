@@ -159,9 +159,9 @@
 "settings.title" = "Настройки";
 "settings.unload" = "Выгружать вкладки, не открытые";
 "settings.unload.detail" = "Они остаются в сайдбаре и загрузятся снова, когда вы их откроете.";
-"sidebar.back.tip" = "Назад (⌘[)";
+"sidebar.back.tip" = "Назад (⌘[). Удерживайте — история";
 "sidebar.extensions.tip" = "Расширения";
-"sidebar.forward.tip" = "Вперёд (⌘])";
+"sidebar.forward.tip" = "Вперёд (⌘]). Удерживайте — история";
 "sidebar.newFolder" = "Новая папка";
 "sidebar.newSpace.tip" = "Новый спейс (⌃⌘N)";
 "sidebar.newTab" = "Новая вкладка";
