@@ -3,6 +3,13 @@ import AppKit
 /// Scrolling as the sidebar wants it everywhere: an overlay bar that shows while scrolling and fades, a thin knob
 /// with no track that widens under the pointer — also when macOS is set to always show scroll bars (or a mouse
 /// is plugged in), which otherwise brings back the wide legacy bar with its track.
+/// A view that shows when the pointer is on it. A scroll view (`ThinScrollView`) asks it again as it scrolls.
+protocol HoverTracking: NSView {
+    var isHovered: Bool { get }
+    /// Hover from where the pointer is now.
+    func refreshHover()
+}
+
 class ThinScrollView: NSScrollView {
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -46,6 +53,24 @@ class ThinScrollView: NSScrollView {
     override func reflectScrolledClipView(_ clipView: NSClipView) {
         super.reflectScrolledClipView(clipView)
         updateFades()
+        refreshHovers()
+    }
+
+    /// Hover follows the pointer through a scroll: what shows hover, and what's under the pointer now, ask again.
+    /// Content moving under a still pointer gets no mouseEntered or mouseExited, so a row scrolled away kept its hover.
+    func refreshHovers() {
+        guard let document = documentView, let window, window.isVisible else { return }
+        let point = document.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        func visit(_ view: NSView) {
+            for child in view.subviews where !child.isHidden {
+                if let tracking = child as? HoverTracking,
+                   tracking.isHovered || child.convert(child.bounds, to: document).contains(point) {
+                    tracking.refreshHover()
+                }
+                visit(child)
+            }
+        }
+        visit(document)
     }
 
     @objc private func updateFades() {

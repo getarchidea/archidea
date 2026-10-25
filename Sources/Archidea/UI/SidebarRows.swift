@@ -1,7 +1,7 @@
 import AppKit
 import ArchideaCore
 
-class ChromeButton: NSButton {
+class ChromeButton: NSButton, HoverTracking {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     private var hovering = false { didSet { needsDisplay = true } }
@@ -38,6 +38,9 @@ class ChromeButton: NSButton {
     override func mouseEntered(with event: NSEvent) { hovering = isUnderPointer }
     override func mouseMoved(with event: NSEvent) { if hovering != isUnderPointer { hovering.toggle() } }
     override func mouseExited(with event: NSEvent) { hovering = false }
+
+    var isHovered: Bool { hovering }
+    func refreshHover() { if hovering != isUnderPointer { hovering.toggle() } }
 
     override func draw(_ dirtyRect: NSRect) {
         if hovering && isEnabled {
@@ -105,7 +108,7 @@ final class SidebarOutline: NSOutlineView {
     }
 }
 
-final class SidebarRowView: NSTableRowView {
+final class SidebarRowView: NSTableRowView, HoverTracking {
     var hoverable = true
 
     /// Presses on the row belong to the list, which takes them even while the window isn't key yet.
@@ -135,6 +138,8 @@ final class SidebarRowView: NSTableRowView {
         super.setFrameSize(newSize)
         refreshHover()
     }
+
+    var isHovered: Bool { hovering }
 
     func refreshHover() {
         let inside = hoverable && isUnderPointer
@@ -167,7 +172,7 @@ final class SidebarRowView: NSTableRowView {
     override var isEmphasized: Bool { get { false } set {} }
 }
 
-final class SidebarCell: NSTableCellView {
+final class SidebarCell: NSTableCellView, HoverTracking {
     static let identifier = NSUserInterfaceItemIdentifier("SidebarCell")
 
     private let icon = NSImageView()
@@ -230,6 +235,8 @@ final class SidebarCell: NSTableCellView {
         refreshHover()
         toolTip = item.isFolder ? nil : item.url
     }
+
+    var isHovered: Bool { hovering }
 
     /// Hover from where the pointer actually is: a cell configured or moved under a still pointer gets no mouseEntered.
     func refreshHover() {
@@ -327,7 +334,7 @@ final class SidebarCell: NSTableCellView {
 /// A split's row: its tabs side by side, each with its icon, its title while there's room for one, and under the
 /// pointer its own close button, with a hairline between each two. While the split is in front, the tab with the
 /// keyboard reads in full and the others dimmer.
-final class SplitCell: NSTableCellView {
+final class SplitCell: NSTableCellView, HoverTracking {
     static let identifier = NSUserInterfaceItemIdentifier("SplitCell")
     private static let gap: CGFloat = 9
 
@@ -374,6 +381,8 @@ final class SplitCell: NSTableCellView {
     func side(at point: NSPoint) -> Int {
         sides.firstIndex { point.x < $0.frame.maxX + Self.gap / 2 } ?? max(0, sides.count - 1)
     }
+
+    var isHovered: Bool { hovered != nil }
 
     func refreshHover() {
         guard let window, isUnderPointer else {

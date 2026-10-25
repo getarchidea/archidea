@@ -7,7 +7,8 @@ under *What's new*.
 
 - Deleting a folder deletes what's in it, instead of leaving its tabs where it was. One that holds tabs asks first,
   and ⇧⌘T brings them back.
-
+- Hover no longer sticks to rows that scrolled away from under the pointer, in the sidebar, the icon and emoji picker
+  and the downloads list: it follows the pointer while scrolling.
 - Switching spaces, the sidebar's list and header no longer slide out over the page: they stay inside the sidebar.
 - Folders open and close faster (about a sixth of a second), starting at once and easing to a stop, instead of
   starting slowly.
