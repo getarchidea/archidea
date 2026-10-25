@@ -64,6 +64,7 @@ final class LiveFolders {
                 folder.feed?.etag = http?.value(forHTTPHeaderField: "ETag")
                 folder.feed?.lastModified = http?.value(forHTTPHeaderField: "Last-Modified")
                 // Open tabs and the ones some window has in front stay, however old.
+                let group = self.group, state = self.state
                 let added = folder.refresh(with: parsed.entries) { tab in
                     group.liveTab(for: tab) != nil || state.space(containing: tab).map { state.isInFront(tab, in: $0) } == true
                 }
