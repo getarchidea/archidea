@@ -80,6 +80,10 @@ extension BrowserWindowController {
         if !wasActive, let tab = shownTab { show(tab) }
     }
 
+    func runtime(_ runtime: TabRuntime, shownTabWasDiscarded tab: ArdiaCoreTab) {
+        if window.isKeyWindow { reloadDiscardedFront() }
+    }
+
     func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, didFindMatches count: Int32, active: Int32) {
         findBar.update(count: Int(count), active: Int(active))
     }
