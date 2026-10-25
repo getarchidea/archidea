@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- The two-finger swipe between spaces keeps up with the fingers and lands in one movement. The sidebar was laid out
+  again on every step of the swipe, and the list came back for a moment before the next space slid in.
+
 ## [0.2.0] - 2026-10-24
 
 - **More than one window**: ⌘N opens another window on the same sidebar, and ⇧⌘W closes one. Every window has its

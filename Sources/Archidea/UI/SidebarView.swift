@@ -191,13 +191,10 @@ final class SidebarView: NSView, WindowDragSurface {
 
         let top = TrafficLights.centerY - origin + 20
         address.frame = NSRect(x: 12, y: top, width: width - 24, height: 38)
-        header.frame = NSRect(x: 12 + swipeOffset, y: top + 48, width: width - 24, height: 28)
+        header.frame = NSRect(x: 12, y: top + 48, width: width - 24, height: 28)
         let listTop = top + 80
         let banner: CGFloat = updateVersion == nil ? 0 : 58
-        scroll.frame = NSRect(x: swipeOffset, y: listTop, width: width, height: max(0, height - listTop - 48 - banner))
-        let fade = 1 - min(0.6, abs(swipeOffset) / max(width, 1))
-        header.alphaValue = fade
-        scroll.alphaValue = fade
+        scroll.frame = NSRect(x: 0, y: listTop, width: width, height: max(0, height - listTop - 48 - banner))
         updateBanner.frame = NSRect(x: 10, y: height - 48 - banner + 4, width: width - 20, height: max(0, banner - 8))
         list.didLayout()
 
@@ -213,22 +210,55 @@ final class SidebarView: NSView, WindowDragSurface {
 
     var addressAnchor: NSView { address }
 
-    /// How far the space's header and list follow a two-finger swipe across the sidebar.
-    var swipeOffset: CGFloat = 0 {
-        didSet {
-            needsLayout = true
-            layoutSubtreeIfNeeded()
+    // MARK: following a swipe
+
+    /// The space's header and list, which a two-finger swipe moves sideways. Their layers move, not their frames: a
+    /// layout of the sidebar on every scroll event (on the main thread, which the engine shares) made the swipe lag.
+    private var swipeLayers: [CALayer] { ([header, scroll] as [NSView]).compactMap(\.layer) }
+
+    /// Puts the header and list `offset` points to the side, fading as they go, at once.
+    func followSwipe(_ offset: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for layer in swipeLayers {
+            layer.removeAnimation(forKey: "swipe")
+            place(layer, at: offset)
         }
+        CATransaction.commit()
     }
 
-    /// Eases the list to `offset` (back to rest, or out of view before the next space comes in).
+    /// Eases the header and list from where they are to `offset`: back to rest, or out of view before the next space.
     func settleSwipe(at offset: CGFloat, duration: TimeInterval, then done: (() -> Void)? = nil) {
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
-            context.allowsImplicitAnimation = true
-            swipeOffset = offset
-        }, completionHandler: done)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock(done)
+        for layer in swipeLayers {
+            let shown = layer.presentation() ?? layer
+            let move = CABasicAnimation(keyPath: "transform")
+            move.fromValue = NSValue(caTransform3D: shown.transform)
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = shown.opacity
+            place(layer, at: offset)
+            move.toValue = NSValue(caTransform3D: layer.transform)
+            fade.toValue = layer.opacity
+            let group = CAAnimationGroup()
+            group.animations = [move, fade]
+            group.duration = duration
+            group.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+            layer.add(group, forKey: "swipe")
+        }
+        CATransaction.commit()
+    }
+
+    /// The next space's header and list come in from `offset`, the side the last ones left from, to rest.
+    func swipeIn(from offset: CGFloat, duration: TimeInterval) {
+        followSwipe(offset)
+        settleSwipe(at: 0, duration: duration)
+    }
+
+    private func place(_ layer: CALayer, at offset: CGFloat) {
+        layer.setAffineTransform(offset == 0 ? .identity : CGAffineTransform(translationX: offset, y: 0))
+        layer.opacity = Float(1 - min(0.6, abs(offset) / max(bounds.width, 1)))
     }
 
     /// A downloaded update waiting for a restart, offered above the space bar; nil hides it.
