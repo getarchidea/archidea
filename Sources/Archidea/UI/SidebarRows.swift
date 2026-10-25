@@ -179,6 +179,10 @@ final class SidebarCell: NSTableCellView, HoverTracking {
     private let title = NSTextField(labelWithString: "")
     private let closeButton = ChromeButton(symbol: "xmark", tip: L("tab.close"), size: 10)
     private let spinner = NSProgressIndicator()
+    /// A live folder's tab not opened yet.
+    private let unreadDot = NSView()
+    /// How many of a live folder's tabs are new.
+    private let count = NSTextField(labelWithString: "")
     private var closable = false
     private var hovering = false {
         didSet {
@@ -207,14 +211,22 @@ final class SidebarCell: NSTableCellView, HoverTracking {
         spinner.style = .spinning
         spinner.controlSize = .small
         spinner.isDisplayedWhenStopped = false
+        unreadDot.wantsLayer = true
+        unreadDot.layer?.cornerRadius = 3
+        unreadDot.isHidden = true
+        count.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        count.textColor = .controlAccentColor
+        count.alignment = .right
+        count.isHidden = true
         imageView = icon
         textField = title
-        [icon, spinner, title, closeButton].forEach(addSubview)
+        [icon, spinner, unreadDot, title, count, closeButton].forEach(addSubview)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(item: SidebarItem, icon image: NSImage?, loaded: Bool, loading: Bool, closable: Bool, tint: NSColor? = nil) {
+    func configure(item: SidebarItem, icon image: NSImage?, loaded: Bool, loading: Bool, closable: Bool, tint: NSColor? = nil,
+                   unread: Bool = false, count newCount: Int = 0) {
         if item.isFolder {
             icon.image = Self.folderImage(item.icon, open: item.expanded)
             icon.contentTintColor = .secondaryLabelColor
@@ -230,6 +242,15 @@ final class SidebarCell: NSTableCellView, HoverTracking {
         }
         title.textColor = loaded ? .labelColor : .secondaryLabelColor
         icon.alphaValue = loaded ? 1 : 0.6
+        // New in a live folder: a dot before it and its title in full, whether its page is loaded or not.
+        unreadDot.isHidden = !unread
+        unreadDot.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        if unread {
+            title.textColor = .labelColor
+            title.font = .systemFont(ofSize: 13, weight: .semibold)
+        }
+        count.stringValue = newCount > 0 ? "\(newCount)" : ""
+        count.isHidden = newCount == 0
         if loading && !item.isFolder { spinner.startAnimation(nil); icon.isHidden = true } else { spinner.stopAnimation(nil); icon.isHidden = false }
         self.closable = closable
         refreshHover()
@@ -271,7 +292,9 @@ final class SidebarCell: NSTableCellView, HoverTracking {
         icon.frame = NSRect(x: left, y: (h - 16) / 2, width: 16, height: 16)
         spinner.frame = icon.frame
         closeButton.frame = NSRect(x: bounds.width - 40, y: (h - 22) / 2, width: 22, height: 22)
-        let right = closeButton.isHidden ? bounds.width - 18 : bounds.width - 44
+        unreadDot.frame = NSRect(x: 8, y: (h - 6) / 2, width: 6, height: 6)
+        count.frame = NSRect(x: bounds.width - 18 - 32, y: (h - 15) / 2, width: 32, height: 15)
+        let right = !closeButton.isHidden ? bounds.width - 44 : !count.isHidden ? count.frame.minX - 4 : bounds.width - 18
         let textHeight = ceil(title.cell?.cellSize.height ?? 17)
         title.frame = NSRect(x: left + 26, y: floor((h - textHeight) / 2), width: max(0, right - left - 26), height: textHeight)
     }

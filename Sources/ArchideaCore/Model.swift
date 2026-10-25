@@ -20,6 +20,12 @@ public final class SidebarItem: Codable {
     /// A split's share of the width for each of its tabs, left to right; nil shares it evenly. `paneWidths` is what
     /// the window lays out.
     public var splitWidths: [Double]?
+    /// A live folder's source, which it fills itself from (`refresh(with:)`); nil for every other item.
+    public var feed: LiveFeed?
+    /// The feed entry a live folder's tab came from, so the same one isn't brought in twice.
+    public var entryID: String?
+    /// Kept only while set, so the file doesn't carry it for every tab.
+    private var unreadMark: Bool?
 
     /// The most tabs a split holds.
     public static let splitLimit = 4
@@ -56,7 +62,8 @@ public final class SidebarItem: Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, url, pinnedURL, children, expanded, lastActive, icon, customTitle, splitWidths
+        case id, kind, title, url, pinnedURL, children, expanded, lastActive, icon, customTitle, splitWidths, feed, entryID
+        case unreadMark = "unread"
     }
 
     /// What builds whose splits held two tabs wrote: the first tab's share of the width.
@@ -81,7 +88,19 @@ public final class SidebarItem: Codable {
         if splitWidths == nil, let ratio = try? decoder.container(keyedBy: OlderKeys.self).decodeIfPresent(Double.self, forKey: .splitRatio) {
             splitWidths = [ratio, 1 - ratio]
         }
+        feed = try? c.decodeIfPresent(LiveFeed.self, forKey: .feed)
+        entryID = try? c.decodeIfPresent(String.self, forKey: .entryID)
+        unreadMark = try? c.decodeIfPresent(Bool.self, forKey: .unreadMark)
     }
+
+    /// A tab a live folder brought in that hasn't been opened yet.
+    public var isUnread: Bool {
+        get { unreadMark == true }
+        set { unreadMark = newValue ? true : nil }
+    }
+
+    /// A folder that fills itself from a feed.
+    public var isLive: Bool { isFolder && feed != nil }
 
     public var isFolder: Bool { kind == .folder }
     public var isSplit: Bool { kind == .split }
@@ -223,6 +242,8 @@ public final class Space: Codable {
     public func remove(_ item: SidebarItem) -> Bool {
         guard let loc = location(of: item) else { return false }
         if let parent = loc.parent {
+            // Taken out of a live folder by hand (closed, or moved elsewhere to keep): it doesn't come back.
+            if parent.isLive, let entry = item.entryID { parent.feed?.dismiss(entry) }
             if parent.isSplit, parent.splitWidths != nil {
                 var widths = parent.paneWidths
                 widths.remove(at: loc.index)
@@ -325,9 +346,14 @@ public final class Space: Codable {
     /// were before the move, so moving down within one list lands where it was let go.
     public func move(_ item: SidebarItem, to slot: Slot, at index: Int) {
         var at = index
-        if let from = location(of: item), let source = self.slot(of: item), source.same(slot), from.index < at { at -= 1 }
+        let source = self.slot(of: item)
+        if let from = location(of: item), let source, source.same(slot), from.index < at { at -= 1 }
         remove(item)
         place(item, in: slot, at: at)
+        // Moved within its live folder, it was never taken out.
+        if source?.same(slot) == true, case let .folder(folder) = slot, let entry = item.entryID {
+            folder.feed?.dismissed.removeAll { $0 == entry }
+        }
     }
 
     /// Today tabs untouched since `cutoff`, except those `keep` holds on to.

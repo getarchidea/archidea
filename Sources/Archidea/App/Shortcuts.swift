@@ -62,6 +62,7 @@ enum Shortcuts {
             item(L("menu.newPrivateWindow"), #selector(AppDelegate.newPrivateWindow), "n", [.command, .shift], reserve: true),
             item(L("menu.openLocation"), #selector(AppDelegate.openLocation), "l", reserve: true),
             item(L("menu.newFolder"), #selector(AppDelegate.newFolder), "n", [.command, .option]),
+            item(L("menu.newLiveFolder"), #selector(AppDelegate.newLiveFolder), ""),
             item(L("menu.newSpace"), #selector(AppDelegate.newSpace), "n", [.command, .control]),
             item(L("menu.import"), #selector(AppDelegate.importData), ""),
             .separator(),

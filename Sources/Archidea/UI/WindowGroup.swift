@@ -15,6 +15,8 @@ final class WindowGroup {
     private var archiveTimer: Timer?
     /// Windows due to show a change made in another one, on the next pass of the run loop.
     private var behind: Set<ObjectIdentifier> = []
+    /// The live folders' feeds, read for the normal windows' sidebar; a private window's group never starts it.
+    private(set) lazy var liveFolders = LiveFolders(group: self)
 
     init(store: Store) {
         self.store = store

@@ -347,7 +347,9 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                        loaded: item.isFolder || !pinned || loaded,
                        loading: delegate?.sidebarIsLoading(item) ?? false,
                        closable: !item.isFolder,
-                       tint: NSColor(hex: space.colorHex))
+                       tint: NSColor(hex: space.colorHex),
+                       unread: item.isUnread,
+                       count: item.isLive ? item.unreadCount : 0)
         cell.setCloseStyle(pinned: pinned, loaded: loaded)
         cell.onClose = { [weak self] in self?.delegate?.sidebarClose(item) }
         return cell
@@ -459,6 +461,14 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         if item.isSplit { return splitMenu(item, into: menu) }
         if item.isFolder {
+            if item.isLive {
+                menu.addItem(ClosureMenuItem(L("live.refresh")) { [weak self] in self?.delegate?.sidebarRefreshLive(item) })
+                if item.unreadCount > 0 {
+                    menu.addItem(ClosureMenuItem(L("live.markRead")) { [weak self] in self?.delegate?.sidebarMarkRead(item) })
+                }
+                menu.addItem(ClosureMenuItem(L("live.unfollow")) { [weak self] in self?.delegate?.sidebarUnfollow(item) })
+                menu.addItem(.separator())
+            }
             menu.addItem(ClosureMenuItem(L("item.rename")) { [weak self] in DispatchQueue.main.async { self?.rename(item) } })
             menu.addItem(ClosureMenuItem(L("folder.icon")) { [weak self] in self?.pickIcon(for: item) })
             menu.addItem(.separator())
@@ -484,6 +494,9 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         })
         if delegate?.sidebarCanSplit(item) == true {
             menu.addItem(ClosureMenuItem(L("split.open")) { [weak self] in self?.delegate?.sidebarSplit(item) })
+        }
+        if delegate?.sidebarCanFollow(item.url) == true {
+            menu.addItem(ClosureMenuItem(L("live.follow")) { [weak self] in self?.delegate?.sidebarFollow(item.url) })
         }
         addMoveToSpace(item, to: menu)
         menu.addItem(.separator())

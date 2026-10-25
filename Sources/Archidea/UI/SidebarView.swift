@@ -51,6 +51,12 @@ protocol SidebarViewDelegate: AnyObject {
     func sidebarCanSplit(_ item: SidebarItem) -> Bool
     func sidebarSplit(_ item: SidebarItem)
     func sidebarSeparate(_ split: SidebarItem)
+    /// Live folders: following the page a tab shows, and what a live folder's menu does.
+    func sidebarCanFollow(_ address: String) -> Bool
+    func sidebarFollow(_ address: String)
+    func sidebarRefreshLive(_ folder: SidebarItem)
+    func sidebarMarkRead(_ folder: SidebarItem)
+    func sidebarUnfollow(_ folder: SidebarItem)
     /// A split's tab closes from its own button: it leaves the split.
     func sidebarClosePane(_ item: SidebarItem)
     func sidebarSwapSides(_ split: SidebarItem)

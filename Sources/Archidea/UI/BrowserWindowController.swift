@@ -521,6 +521,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         }
         windowState.select(item.id, in: space)
         item.lastActive = Date()
+        if item.isUnread {
+            // Opened, a live folder's new tab isn't new any more: in every window, and in its folder's count.
+            item.isUnread = false
+            reloadSidebar()
+        }
         if let split = space.split(containing: item) {
             split.lastActive = item.lastActive
             lastSide[split.id] = item.id

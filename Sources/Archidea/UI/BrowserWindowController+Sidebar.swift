@@ -95,6 +95,11 @@ extension BrowserWindowController {
     func sidebarCanSplit(_ item: SidebarItem) -> Bool { canSplit(with: item.id) }
     func sidebarSplit(_ item: SidebarItem) { split(with: item.id) }
     func sidebarSeparate(_ split: SidebarItem) { separate(split) }
+    func sidebarCanFollow(_ address: String) -> Bool { canFollow(address) }
+    func sidebarFollow(_ address: String) { follow(address) }
+    func sidebarRefreshLive(_ folder: SidebarItem) { refreshLive(folder) }
+    func sidebarMarkRead(_ folder: SidebarItem) { markRead(folder) }
+    func sidebarUnfollow(_ folder: SidebarItem) { unfollow(folder) }
     func sidebarClosePane(_ item: SidebarItem) { closePane(item) }
     func sidebarSwapSides(_ split: SidebarItem) { swapSides(split) }
     func sidebarDragBegan() { dragFromSidebarBegan() }
