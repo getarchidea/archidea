@@ -15,6 +15,9 @@ under *What's new*.
 - The back and forward buttons list the tab's history: hold one, or right-click it, and pick a page; with ⌘ it opens
   in a new tab instead. A middle click or ⌘-click on the button opens the previous (or next) page in a new tab behind
   the one you're on.
+- **A calmer start page**: the space you're in, a search field and the few keys worth knowing, on a soft wash of the
+  space's colour. The most visited sites and recently closed tabs are gone from it: they're in History and on ⇧⌘T,
+  and favourites are pinned in the sidebar.
 
 ## [0.3.0] - 2026-10-25
 

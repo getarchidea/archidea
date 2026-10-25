@@ -42,40 +42,6 @@ final class HistoryIndex {
         }
     }
 
-    struct Site {
-        let host: String
-        let url: String
-        let title: String
-    }
-
-    /// The sites visited most, lately weighing more than long ago: the start page's tiles. Sign-in hosts are left
-    /// out (nobody goes back to them on purpose), and so is anything in `hidden`.
-    func topSites(limit: Int, hidden: Set<String>) -> [Site] {
-        let now = Date()
-        var score: [String: Double] = [:]
-        var best: [String: Entry] = [:]
-        for entry in entries where !entry.host.isEmpty && !hidden.contains(entry.host) {
-            let first = entry.host.split(separator: ".").first.map(String.init) ?? ""
-            if ["accounts", "login", "auth", "signin", "sso", "oauth", "id"].contains(first) { continue }
-            // Dev servers come and go.
-            if entry.host == "localhost" || entry.host == "127.0.0.1" || entry.host.hasSuffix(".local") || entry.host.hasSuffix(".localhost") { continue }
-            let days = max(0, now.timeIntervalSince(entry.lastVisit) / 86_400)
-            score[entry.host, default: 0] += Double(entry.visits) * exp(-days / 30)
-            // The site's name comes from its front page when that's in history, else its most visited page.
-            let isRoot = (URL(string: entry.url)?.path ?? "").count <= 1
-            if let current = best[entry.host] {
-                let currentRoot = (URL(string: current.url)?.path ?? "").count <= 1
-                if isRoot && !currentRoot || isRoot == currentRoot && entry.visits > current.visits { best[entry.host] = entry }
-            } else {
-                best[entry.host] = entry
-            }
-        }
-        return score.sorted { $0.value > $1.value }.prefix(limit).compactMap { host, _ in
-            guard let entry = best[host], let url = URL(string: entry.url), let scheme = url.scheme, let realHost = url.host else { return nil }
-            return Site(host: host, url: "\(scheme)://\(realHost)/", title: entry.title)
-        }
-    }
-
     /// History changed in bulk (an import): the next refresh reads it again whenever it comes.
     func invalidate() { loadedAt = .distantPast }
 
