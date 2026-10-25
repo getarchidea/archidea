@@ -10,6 +10,8 @@ struct TabChange: OptionSet {
     static let favicon = TabChange(rawValue: 1 << 1)
     /// Loading, back and forward, sound, being put to sleep: shown, never saved.
     static let shown = TabChange(rawValue: 1 << 2)
+    /// Sound starting, stopping or quieted: the folders around the tab show it too.
+    static let sound = TabChange(rawValue: 1 << 3)
 }
 
 protocol TabRuntimeDelegate: AnyObject {
@@ -158,7 +160,7 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
     }
     @objc(tabDidChangeProgress:) func tabDidChangeProgress(_ tab: ArdiaCoreTab) { delegate?.runtime(self, loadingOf: tab) }
     @objc(tabDidChangeNavigationState:) func tabDidChangeNavigationState(_ tab: ArdiaCoreTab) { changed(tab) }
-    @objc(tabDidChangeAudio:) func tabDidChangeAudio(_ tab: ArdiaCoreTab) { changed(tab) }
+    @objc(tabDidChangeAudio:) func tabDidChangeAudio(_ tab: ArdiaCoreTab) { changed(tab, [.shown, .sound]) }
     @objc(tabDidChangeDiscarded:) func tabDidChangeDiscarded(_ tab: ArdiaCoreTab) { changed(tab) }
 
     // MARK: blocked requests

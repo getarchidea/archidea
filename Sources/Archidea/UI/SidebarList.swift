@@ -117,8 +117,16 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     /// A split's side is drawn by its split's row.
-    func reloadItem(_ item: SidebarItem) {
+    /// With `folders`, the folders it's in too, whose rows show what's inside them (sound).
+    func reloadItem(_ item: SidebarItem, folders: Bool = false) {
         let row = space.row(of: item)
+        if folders {
+            var parent = space.location(of: row)?.parent
+            while let folder = parent {
+                if folder !== renaming, outline.row(forItem: folder) >= 0 { outline.reloadItem(folder, reloadChildren: false) }
+                parent = space.location(of: folder)?.parent
+            }
+        }
         guard row !== renaming, outline.row(forItem: row) >= 0 else { return }
         outline.reloadItem(row, reloadChildren: false)
         if let id = selectedID, row.allTabs.contains(where: { $0.id == id }) { reflectSelection() }
@@ -349,9 +357,11 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                        closable: !item.isFolder,
                        tint: NSColor(hex: space.colorHex),
                        unread: item.isUnread,
-                       count: item.isLive ? item.unreadCount : 0)
+                       count: item.isLive ? item.unreadCount : 0,
+                       sound: delegate?.sidebarSound(item) ?? .silent)
         cell.setCloseStyle(pinned: pinned, loaded: loaded)
         cell.onClose = { [weak self] in self?.delegate?.sidebarClose(item) }
+        cell.onSound = { [weak self] in self?.delegate?.sidebarToggleSound(item) }
         return cell
     }
 
@@ -365,10 +375,15 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                        loaded: loaded.map { !pinned || $0 },
                        loading: sides.map { delegate?.sidebarIsLoading($0) ?? false },
                        focused: sides.firstIndex { $0.id == selectedID },
-                       closeTip: pinned ? L("tab.removePinned.tip") : L("tab.close"))
+                       closeTip: pinned ? L("tab.removePinned.tip") : L("tab.close"),
+                       sounds: sides.map { delegate?.sidebarSound($0) ?? .silent })
         cell.onClose = { [weak self] index in
             guard split.children.indices.contains(index) else { return }
             self?.delegate?.sidebarClosePane(split.children[index])
+        }
+        cell.onSound = { [weak self] index in
+            guard split.children.indices.contains(index) else { return }
+            self?.delegate?.sidebarToggleSound(split.children[index])
         }
         return cell
     }
@@ -487,6 +502,11 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                 self?.outline.reloadItem(item, reloadChildren: false)
                 self?.delegate?.sidebarChanged()
             })
+        }
+        switch delegate?.sidebarSound(item) ?? .silent {
+        case .playing: menu.addItem(ClosureMenuItem(L("tab.mute")) { [weak self] in self?.delegate?.sidebarToggleSound(item) })
+        case .muted: menu.addItem(ClosureMenuItem(L("tab.unmute")) { [weak self] in self?.delegate?.sidebarToggleSound(item) })
+        case .silent: break
         }
         menu.addItem(ClosureMenuItem(L("tab.copyLink")) {
             NSPasteboard.general.clearContents()

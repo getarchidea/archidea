@@ -90,6 +90,22 @@ extension BrowserWindowController {
         group.liveTab(for: item)?.loading ?? false
     }
 
+    func sidebarSound(_ item: SidebarItem) -> TabSound {
+        let pages = item.allTabs.compactMap { group.liveTab(for: $0) }
+        if pages.contains(where: { $0.audible && !$0.muted }) { return .playing }
+        return pages.contains(where: \.muted) ? .muted : .silent
+    }
+
+    /// Something playing goes quiet, all of it; else everything quieted plays again.
+    func sidebarToggleSound(_ item: SidebarItem) {
+        let pages = item.allTabs.compactMap { group.liveTab(for: $0) }
+        let quiet = pages.contains { $0.audible && !$0.muted }
+        for page in pages where quiet ? page.audible : page.muted { page.muted = quiet }
+        Trace.log("sound \(quiet ? "off" : "on") for \(item.traceName)")
+        sidebar.reloadItem(item, folders: true)
+        group.itemChanged(item, by: self, folders: true)
+    }
+
     // MARK: split view
 
     func sidebarCanSplit(_ item: SidebarItem) -> Bool { canSplit(with: item.id) }

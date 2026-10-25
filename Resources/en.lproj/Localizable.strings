@@ -194,6 +194,8 @@
 "space.rename" = "Rename Space…";
 "space.rename.title" = "Rename Space";
 "tab.close" = "Close";
+"tab.mute" = "Mute Tab";
+"tab.unmute" = "Unmute Tab";
 "tab.copyLink" = "Copy Link";
 "tab.moveToSpace" = "Move to Space";
 "tab.pin" = "Pin";

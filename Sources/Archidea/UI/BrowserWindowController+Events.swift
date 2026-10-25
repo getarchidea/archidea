@@ -16,8 +16,9 @@ extension BrowserWindowController {
     /// what it keeps changed, and the icon only when the page has a new one.
     func runtime(_ runtime: TabRuntime, didUpdate item: SidebarItem, change: TabChange) {
         if change.contains(.favicon), let icon = runtime.liveTab(for: item)?.favicon { store.setFavicon(icon, for: item) }
-        sidebar.reloadItem(item)
-        group.itemChanged(item, by: self)
+        let folders = change.contains(.sound)
+        sidebar.reloadItem(item, folders: folders)
+        group.itemChanged(item, by: self, folders: folders)
         if item === activeItem {
             sidebar.updateAddress(runtime.liveTab(for: item))
             if change.contains(.saved) { updateWindowTitle() }

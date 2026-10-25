@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- A tab playing sound shows a speaker in the sidebar, and so does a folder or split holding one; click it to mute
+  the tab, and again to let it play. A muted tab shows the speaker crossed out. The tab's menu has *Mute Tab* too.
+
 ## [0.4.0] - 2026-10-25
 
 - **Live folders**: *Follow Updates* on a tab (or in the controls behind the address, or File › New Live Folder) turns
