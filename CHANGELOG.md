@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-25
+
 - A tab playing sound shows a speaker in the sidebar, and so does a folder or split holding one; click it to mute
   the tab, and again to let it play. A muted tab shows the speaker crossed out. The tab's menu has *Mute Tab* too.
 
