@@ -16,7 +16,7 @@ final class IconPicker: NSViewController, NSSearchFieldDelegate {
     private let search = NSSearchField()
     private let anyEmoji = NSTextField()
     private let allEmoji = NSButton()
-    private let scroll = NSScrollView()
+    private let scroll = ThinScrollView()
     private let grid = IconGrid()
 
     private static let columns = 8
@@ -145,7 +145,7 @@ private final class IconGrid: NSView {
     override var isFlipped: Bool { true }
 }
 
-private final class IconCell: NSView {
+private final class IconCell: NSView, HoverTracking {
     var onClick: (() -> Void)?
     private let icon = NSImageView()
     private let tint: NSColor
@@ -189,4 +189,7 @@ private final class IconCell: NSView {
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
     override func mouseDown(with event: NSEvent) { onClick?() }
+
+    var isHovered: Bool { hovering }
+    func refreshHover() { if hovering != isUnderPointer { hovering.toggle() } }
 }

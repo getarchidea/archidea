@@ -189,7 +189,7 @@ private final class FlippedView: NSView {
 }
 
 /// One download: the file's icon, its name, where it stands, and what can be done with it.
-private final class DownloadRow: NSView, NSDraggingSource {
+private final class DownloadRow: NSView, NSDraggingSource, HoverTracking {
     var item: Downloads.Item? { didSet { if item != oldValue { update() } } }
 
     private let openURL: (String) -> Void
@@ -410,6 +410,9 @@ private final class DownloadRow: NSView, NSDraggingSource {
 
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
+
+    var isHovered: Bool { hovering }
+    func refreshHover() { if hovering != isUnderPointer { hovering.toggle() } }
 
     override func draw(_ dirtyRect: NSRect) {
         guard hovering else { return }
