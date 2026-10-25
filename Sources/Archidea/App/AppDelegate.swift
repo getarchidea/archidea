@@ -128,6 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showAll()
         }
         IncomingLinks.handler = { [weak self] url in self?.openIncoming(url) }
+        // The live folders start reading their feeds.
+        _ = browser.liveFolders
         #if DRIFT_DEV
         let controller = windows[0]
         SelfTest.runIfRequested(controller)
@@ -290,6 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func goBack(_ sender: Any?) { activePage?.goBack() }
     @objc func goForward(_ sender: Any?) { activePage?.goForward() }
     @objc func find(_ sender: Any?) { current?.showFind() }
+    @objc func newLiveFolder(_ sender: Any?) { current?.newLiveFolder() }
     @objc func copyURL(_ sender: Any?) {
         if let mini = keyMini {
             NSPasteboard.general.clearContents()

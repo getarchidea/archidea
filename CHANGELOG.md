@@ -5,6 +5,12 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **Live folders**: *Follow Updates* on a tab (or in the controls behind the address, or File › New Live Folder) turns
+  the site into a folder among the pins that fills itself with its latest posts, videos or releases, from the feed the
+  site publishes. It's checked every half hour while Archidea runs; what came in since you last looked has a dot, and
+  the folder counts it. A post you close doesn't come back, and only the latest 30 stay. The folder's menu checks
+  now, marks everything read, or stops following and keeps it as a plain folder.
+
 ## [0.3.0] - 2026-10-25
 
 - **Split view**: up to four tabs side by side in one window, one row in the sidebar. Drag a tab from the sidebar
