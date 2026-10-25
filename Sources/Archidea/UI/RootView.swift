@@ -34,7 +34,7 @@ final class RootView: NSView, WindowDragSurface {
 
     private let backdrop = BackdropView()
     private let tintView = TintView()
-    private let pageShadow = ShadowView()
+    private let pageShadow = PageShadow()
     private let handle = ResizeHandle()
 
     override init(frame: NSRect) {
@@ -126,7 +126,8 @@ final class RootView: NSView, WindowDragSurface {
         content?.frame = page
         content?.cornerRadius = contentFullscreen ? 0 : 10
         pageShadow.frame = page
-        pageShadow.isHidden = contentFullscreen
+        // A split's pages are cards of their own, each with its shadow.
+        pageShadow.isHidden = contentFullscreen || content?.showsCard == false
         let side = contentFullscreen ? sidebarFrame.offsetBy(dx: -CGFloat(sidebarWidth) - 40, dy: 0) : sidebarFrame
         // The slid-out sidebar lies over the page: the page's corner cards keep clear of it, moving with it.
         content?.sidebarClearance = mode == .overlay && !contentFullscreen ? max(0, side.maxX - page.minX) : 0
@@ -147,9 +148,9 @@ final class RootView: NSView, WindowDragSurface {
     }
 }
 
-/// The page card sits a little above the chrome: a soft shadow, shown only next to a docked sidebar.
+/// The page card sits a little above the chrome: a soft shadow behind it, and behind each card of a split.
 /// AppKit owns the layers of the views it manages and resets shadows set on them, so this one applies its own in `updateLayer`.
-private final class ShadowView: NSView {
+final class PageShadow: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -188,6 +189,20 @@ private final class TintView: NSView, WindowDragSurface {}
 final class ContentView: NSView {
     weak var emptyState: NSView?
     var onLayout: (() -> Void)?
+    /// Whether the area is the page's card. A split's pages are cards of their own, with the window between them:
+    /// then it's clear, and lets their shadows and the ring round the page with the keyboard show past its edges.
+    var showsCard = true {
+        didSet {
+            guard showsCard != oldValue else { return }
+            needsDisplay = true
+            superview?.needsLayout = true
+        }
+    }
+    /// The page with the keyboard: a split's one card, or all of it. The find bar and the site's prompts sit on it.
+    var activeFrame: NSRect? {
+        didSet { if activeFrame != oldValue { needsLayout = true } }
+    }
+    var pageFrame: NSRect { activeFrame ?? bounds }
     /// How much of the page's left edge the slid-out sidebar covers.
     var sidebarClearance: CGFloat = 0 {
         didSet { if sidebarClearance != oldValue { needsLayout = true } }
@@ -203,6 +218,7 @@ final class ContentView: NSView {
         layer?.masksToBounds = true
         layer?.cornerRadius = cornerRadius
         layer?.cornerCurve = .continuous
+        clipsToBounds = false
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -210,17 +226,19 @@ final class ContentView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        layer?.backgroundColor = Theme.page.cgColor
+        layer?.masksToBounds = showsCard
+        layer?.backgroundColor = showsCard ? Theme.page.cgColor : NSColor.clear.cgColor
         layer?.borderColor = Theme.hairline.cgColor
-        layer?.borderWidth = 1
+        layer?.borderWidth = showsCard ? 1 : 0
     }
 
     override func layout() {
         super.layout()
         emptyState?.frame = bounds
+        // The pages first: the find bar and prompts go on the one with the keyboard.
+        onLayout?()
         for case let bar as FindBar in subviews { bar.place() }
         for case let card as PromptCard in subviews { card.place() }
-        onLayout?()
     }
 }
 

@@ -57,8 +57,8 @@ extension BrowserWindowController {
     func runtime(_ runtime: TabRuntime, tabDidClose item: SidebarItem) {
         guard let owner = state.space(containing: item) else { return }
         let wasActive = owner === space && item === activeItem
-        // A Today split's side closing leaves the other side in its place, and in front.
-        let otherSide = owner.isPinned(item) ? nil : owner.split(containing: item)?.children.first { $0 !== item }
+        // A Today split's page closing leaves the one beside it in front.
+        let otherSide = owner.isPinned(item) ? nil : owner.split(containing: item)?.nextPane(after: item)
         if owner.isPinned(item) {
             if let home = item.pinnedURL { item.url = home }
         } else {
@@ -75,7 +75,7 @@ extension BrowserWindowController {
         group.unload(item)
         reloadSidebar()
         store.setNeedsSave()
-        // It was the other side of the split in front: the side here has the page to itself.
+        // It was another page of the split in front: the rest share the window.
         if !wasActive, let tab = shownTab { show(tab) }
     }
 
@@ -84,7 +84,7 @@ extension BrowserWindowController {
     }
 
     func runtime(_ runtime: TabRuntime, tabGainedFocus tab: ArdiaCoreTab) {
-        if tab === pairedTab { focusPane(tab) }
+        focusPane(tab)
     }
 
     func runtime(_ runtime: TabRuntime, tabNeedsActivation tab: ArdiaCoreTab) {
@@ -122,11 +122,13 @@ extension BrowserWindowController {
         let key = ObjectIdentifier(tab)
         if let old = devToolsViews[key], old !== view { old.removeFromSuperview() }
         devToolsViews[key] = view
-        if tab === shownTab { layoutTab() }
+        if tab === shownTab || otherPanes.contains(where: { $0 === tab }) { layoutTab() }
     }
 
     @objc(window:tab:didChangeFullscreen:)
     func window(_ window: ArdiaCoreWindow, tab: ArdiaCoreTab, didChangeFullscreen fullscreen: Bool) {
+        // A split's page going full screen takes the window: it's the one in front.
+        if fullscreen { focusPane(tab) }
         contentFullscreen = fullscreen
         applySidebarMode(animated: false)
         let isFull = self.window.styleMask.contains(.fullScreen)

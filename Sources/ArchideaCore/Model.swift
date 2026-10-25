@@ -1,8 +1,8 @@
 import Foundation
 
 public final class SidebarItem: Codable {
-    /// A split is two tabs side by side in the window, one row in the sidebar; its `children` are the two tabs,
-    /// the first on the left. A version without splits reads one as a folder holding its two tabs.
+    /// A split is two to four tabs side by side in the window, one row in the sidebar; its `children` are the tabs,
+    /// left to right. A version without splits reads one as a folder holding its tabs.
     public enum Kind: String, Codable { case tab, folder, split }
 
     public let id: UUID
@@ -17,8 +17,12 @@ public final class SidebarItem: Codable {
     public var icon: String?
     /// A name the user gave the tab; the page's own title no longer shows while it's set.
     public var customTitle: String?
-    /// A split's share of the width for its first tab; nil is half.
-    public var splitRatio: Double?
+    /// A split's share of the width for each of its tabs, left to right; nil shares it evenly. `paneWidths` is what
+    /// the window lays out.
+    public var splitWidths: [Double]?
+
+    /// The most tabs a split holds.
+    public static let splitLimit = 4
 
     public init(tab url: String, title: String = "") {
         id = UUID()
@@ -30,15 +34,15 @@ public final class SidebarItem: Codable {
         lastActive = Date()
     }
 
-    /// A split of two tabs, `first` on the left. `Space.makeSplit` puts one in a list.
-    public init(split first: SidebarItem, _ second: SidebarItem) {
+    /// A split of `tabs`, left to right. `Space.makeSplit` puts one in a list.
+    public init(split tabs: [SidebarItem]) {
         id = UUID()
         kind = .split
         title = ""
         url = ""
-        children = [first, second]
+        children = tabs
         expanded = true
-        lastActive = max(first.lastActive, second.lastActive)
+        lastActive = tabs.map(\.lastActive).max() ?? Date()
     }
 
     public init(folder title: String) {
@@ -52,8 +56,11 @@ public final class SidebarItem: Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, url, pinnedURL, children, expanded, lastActive, icon, customTitle, splitRatio
+        case id, kind, title, url, pinnedURL, children, expanded, lastActive, icon, customTitle, splitWidths
     }
+
+    /// What builds whose splits held two tabs wrote: the first tab's share of the width.
+    private enum OlderKeys: String, CodingKey { case splitRatio }
 
     /// Reads what any version wrote: a field this one doesn't know is skipped, one it lacks takes its default. A value
     /// that is there but doesn't read (a damaged file) still fails, so the file is set aside rather than written over.
@@ -70,7 +77,10 @@ public final class SidebarItem: Codable {
         lastActive = try c.decodeIfPresent(Date.self, forKey: .lastActive) ?? Date()
         icon = try c.decodeIfPresent(String.self, forKey: .icon)
         customTitle = try c.decodeIfPresent(String.self, forKey: .customTitle)
-        splitRatio = try? c.decodeIfPresent(Double.self, forKey: .splitRatio)
+        splitWidths = try? c.decodeIfPresent([Double].self, forKey: .splitWidths)
+        if splitWidths == nil, let ratio = try? decoder.container(keyedBy: OlderKeys.self).decodeIfPresent(Double.self, forKey: .splitRatio) {
+            splitWidths = [ratio, 1 - ratio]
+        }
     }
 
     public var isFolder: Bool { kind == .folder }
@@ -93,7 +103,26 @@ public final class SidebarItem: Codable {
         isTab ? [self] : children.flatMap(\.allTabs)
     }
 
-    /// A tab among the pins keeps the address it was pinned at, to go back to; a pinned split's two tabs both do.
+    /// Each tab's share of a split's width, left to right, adding up to 1: the shares set, or even ones when none are
+    /// (or they don't fit the tabs).
+    public var paneWidths: [Double] {
+        let count = children.count
+        guard count > 0 else { return [] }
+        if let widths = splitWidths, widths.count == count, widths.allSatisfy({ $0 > 0 }) {
+            let total = widths.reduce(0, +)
+            return widths.map { $0 / total }
+        }
+        return Array(repeating: 1 / Double(count), count: count)
+    }
+
+    /// The tab of a split that takes over from `tab` when it leaves: the one to its right, else the one to its left.
+    public func nextPane(after tab: SidebarItem) -> SidebarItem? {
+        guard let index = children.firstIndex(where: { $0 === tab }) else { return nil }
+        if children.indices.contains(index + 1) { return children[index + 1] }
+        return index > 0 ? children[index - 1] : nil
+    }
+
+    /// A tab among the pins keeps the address it was pinned at, to go back to; a pinned split's tabs all do.
     fileprivate func keepHome() {
         if isSplit { children.forEach { $0.keepHome() } }
         if isTab, pinnedURL == nil { pinnedURL = url }
@@ -188,11 +217,17 @@ public final class Space: Codable {
     /// The sidebar's row for `item`: its split when it's one side of one, else the item itself.
     public func row(of item: SidebarItem) -> SidebarItem { split(containing: item) ?? item }
 
-    /// Takes the item out of its list. A split left with one tab gives way to that tab, in its place.
+    /// Takes the item out of its list. A split left with one tab gives way to that tab, in its place; one left with
+    /// more keeps their shares of the width, between them.
     @discardableResult
     public func remove(_ item: SidebarItem) -> Bool {
         guard let loc = location(of: item) else { return false }
         if let parent = loc.parent {
+            if parent.isSplit, parent.splitWidths != nil {
+                var widths = parent.paneWidths
+                widths.remove(at: loc.index)
+                parent.splitWidths = widths
+            }
             parent.children.remove(at: loc.index)
             if parent.isSplit, parent.children.count < 2 { separate(parent) }
         }
@@ -201,24 +236,37 @@ public final class Space: Codable {
         return true
     }
 
-    /// Puts `second` beside `first`, in `first`'s place, as a split; `second` leaves wherever it was in this space.
-    /// Both must be tabs of their own, not in a split already. `second` goes on the left when `secondFirst`.
+    /// Puts `tab` beside `anchor`, right after it or (`before`) right before it: into `anchor`'s split while that
+    /// has room, else into a new split in `anchor`'s place. `tab` leaves wherever it was in this space; it must be a
+    /// tab of its own, not in a split. The tabs then share the width evenly. Returns the split.
     @discardableResult
-    public func makeSplit(_ first: SidebarItem, with second: SidebarItem, secondFirst: Bool = false) -> SidebarItem? {
-        guard first !== second, first.isTab, second.isTab, split(containing: first) == nil, split(containing: second) == nil
-        else { return nil }
-        if location(of: second) != nil { remove(second) }
-        guard let loc = location(of: first) else { return nil }
-        let split = secondFirst ? SidebarItem(split: second, first) : SidebarItem(split: first, second)
+    public func makeSplit(_ anchor: SidebarItem, with tab: SidebarItem, before: Bool = false) -> SidebarItem? {
+        guard anchor !== tab, anchor.isTab, tab.isTab, split(containing: tab) == nil else { return nil }
+        if let split = split(containing: anchor) {
+            guard split.children.count < SidebarItem.splitLimit else { return nil }
+            if location(of: tab) != nil { remove(tab) }
+            guard let index = split.children.firstIndex(where: { $0 === anchor }) else { return nil }
+            split.children.insert(tab, at: before ? index : index + 1)
+            split.splitWidths = nil
+            settle(split)
+            return split
+        }
+        if location(of: tab) != nil { remove(tab) }
+        guard let loc = location(of: anchor) else { return nil }
+        let split = SidebarItem(split: before ? [tab, anchor] : [anchor, tab])
         if let parent = loc.parent { parent.children[loc.index] = split }
         else if loc.inToday { today[loc.index] = split }
         else { pinned[loc.index] = split }
-        // Its tabs follow the list's rule: pinned ones keep a home address, Today ones have none.
-        if loc.inToday { split.children.forEach { $0.pinnedURL = nil } } else { split.keepHome() }
+        settle(split)
         return split
     }
 
-    /// Breaks a split into its tabs where it was: the first in its place, the second right after it.
+    /// A split's tabs follow its list's rule: pinned ones keep a home address, Today ones have none.
+    private func settle(_ split: SidebarItem) {
+        if location(of: split)?.inToday == true { split.children.forEach { $0.pinnedURL = nil } } else { split.keepHome() }
+    }
+
+    /// Breaks a split into its tabs where it was: the first in its place, the others right after it, in order.
     public func separate(_ split: SidebarItem) {
         guard split.isSplit, let loc = location(of: split) else { return }
         let tabs = split.children
@@ -398,7 +446,7 @@ public final class AppState: Codable {
     }
 
     /// Puts right what an older version (or a bug) may have saved: a folder in Today goes back among the pins, a
-    /// split holds two tabs, a pinned tab gets its home address, a Today tab loses one, every window shows a space
+    /// split holds two to four tabs, a pinned tab gets its home address, a Today tab loses one, every window shows a space
     /// that exists and there is a window. Returns whether anything changed.
     @discardableResult
     public func repair() -> Bool {
@@ -410,15 +458,22 @@ public final class AppState: Codable {
                 space.pinned += strays
                 changed = true
             }
-            // A split holds two tabs of its own. One holding anything else gives way to the tabs in it.
+            // A split holds two to four tabs of its own. One holding anything else gives way to the tabs in it.
             func splits(_ items: [SidebarItem]) -> [SidebarItem] {
                 items.flatMap { $0.isSplit ? [$0] : $0.isFolder ? splits($0.children) : [] }
             }
-            for split in splits(space.today) + splits(space.pinned)
-            where split.children.count != 2 || !split.children.allSatisfy(\.isTab) {
-                split.children = split.allTabs
-                if split.children.count != 2 { space.separate(split) }
-                changed = true
+            for split in splits(space.today) + splits(space.pinned) {
+                if !split.children.allSatisfy(\.isTab) {
+                    split.children = split.allTabs
+                    changed = true
+                }
+                if !(2...SidebarItem.splitLimit).contains(split.children.count) {
+                    space.separate(split)
+                    changed = true
+                } else if let widths = split.splitWidths, widths.count != split.children.count {
+                    split.splitWidths = nil
+                    changed = true
+                }
             }
             for item in space.today.flatMap(\.allTabs) where item.pinnedURL != nil {
                 item.pinnedURL = nil

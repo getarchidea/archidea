@@ -83,7 +83,9 @@ final class FindBar: NSView, NSTextFieldDelegate {
 
     func place() {
         guard let superview else { return }
-        frame = NSRect(x: superview.bounds.width - Self.size.width - 14, y: superview.bounds.height - Self.size.height - 14,
+        // On the page it searches: in a split, the one with the keyboard.
+        let page = (superview as? ContentView)?.pageFrame ?? superview.bounds
+        frame = NSRect(x: page.maxX - Self.size.width - 14, y: page.maxY - Self.size.height - 14,
                        width: Self.size.width, height: Self.size.height)
         layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 12, cornerHeight: 12, transform: nil)
         card.frame = bounds

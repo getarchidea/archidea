@@ -409,6 +409,8 @@
 "split.separate" = "Разделить вкладки";
 "split.swap" = "Поменять местами";
 "split.close" = "Закрыть сплит";
+"split.addLeft" = "Добавить слева";
+"split.addRight" = "Добавить справа";
 "menu.splitView" = "Новый сплит";
 "start.hide" = "Убрать со стартовой страницы";
 "update.downloading" = "Скачивается Archidea %@";

@@ -324,82 +324,88 @@ final class SidebarCell: NSTableCellView {
     }
 }
 
-/// A split's row: its two tabs side by side, each with its icon and title, and a hairline between them. While the
-/// split is in front, the side with the keyboard reads in full and the other dimmer.
+/// A split's row: its tabs side by side, each with its icon, its title while there's room for one, and under the
+/// pointer its own close button, with a hairline between each two. While the split is in front, the tab with the
+/// keyboard reads in full and the others dimmer.
 final class SplitCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("SplitCell")
+    private static let gap: CGFloat = 9
 
-    private let sides = [SplitSide(), SplitSide()]
-    private let closeButton = ChromeButton(symbol: "xmark", tip: L("split.close"), size: 10)
-    private var middle: CGFloat = 0
-    private var hovering = false {
+    private var sides: [SplitSide] = []
+    /// The side under the pointer, which shows its close button.
+    private var hovered: Int? {
         didSet {
-            closeButton.isHidden = !hovering
-            needsLayout = true
+            guard hovered != oldValue else { return }
+            for (index, side) in sides.enumerated() { side.showsClose = index == hovered }
         }
     }
-    var onClose: (() -> Void)?
+    /// A side's close button was pressed: its place, left to right.
+    var onClose: ((Int) -> Void)?
 
     init() {
         super.init(frame: .zero)
         identifier = Self.identifier
-        closeButton.isHidden = true
-        closeButton.target = self
-        closeButton.action = #selector(closeTapped)
-        sides.forEach(addSubview)
-        addSubview(closeButton)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    /// `focused`: the side with the keyboard, while the split is in front.
-    func configure(split: SidebarItem, icons: [NSImage?], loaded: [Bool], loading: [Bool], focused: Int?) {
-        for (index, side) in sides.enumerated() where split.children.indices.contains(index) {
+    /// `focused`: the tab with the keyboard, while the split is in front. `closeTip` says what a side's close button
+    /// does: in Today it closes the tab, among the pins it takes it out.
+    func configure(split: SidebarItem, icons: [NSImage?], loaded: [Bool], loading: [Bool], focused: Int?, closeTip: String) {
+        while sides.count < split.children.count {
+            let index = sides.count
+            let side = SplitSide()
+            side.onClose = { [weak self] in self?.onClose?(index) }
+            addSubview(side)
+            sides.append(side)
+        }
+        while sides.count > split.children.count { sides.removeLast().removeFromSuperview() }
+        for (index, side) in sides.enumerated() {
             side.configure(title: split.children[index].displayTitle, icon: icons[index], loaded: loaded[index],
-                           loading: loading[index], strong: focused == nil || focused == index)
+                           loading: loading[index], strong: focused == nil || focused == index, closeTip: closeTip)
+            side.showsClose = index == hovered
         }
         toolTip = split.children.map(\.url).joined(separator: "\n")
+        needsLayout = true
         refreshHover()
     }
 
-    /// Which side (0 on the left, 1 on the right) a point in the cell is over.
-    func side(at point: NSPoint) -> Int { point.x < middle ? 0 : 1 }
-
-    /// As a pin's: an open pinned split shows a minus (it closes but keeps its place), anything else a cross.
-    func setCloseStyle(pinned: Bool, loaded: Bool) {
-        let unloads = pinned && loaded
-        closeButton.setSymbol(unloads ? "minus" : "xmark", size: 10)
-        closeButton.toolTip = unloads ? L("tab.unload.tip") : pinned ? L("tab.removePinned.tip") : L("split.close")
+    /// Which side (0 on the left) a point in the cell is over.
+    func side(at point: NSPoint) -> Int {
+        sides.firstIndex { point.x < $0.frame.maxX + Self.gap / 2 } ?? max(0, sides.count - 1)
     }
 
     func refreshHover() {
-        let inside = isUnderPointer
-        if inside != hovering { hovering = inside }
+        guard let window, isUnderPointer else {
+            hovered = nil
+            return
+        }
+        hovered = side(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
     }
 
-    /// Only the close button takes presses; the rest goes to the list, which tells the sides apart.
+    /// Only the close buttons take presses; the rest goes to the list, which tells the sides apart.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        if let hit, hit === closeButton || hit.isDescendant(of: closeButton) { return hit }
+        if let hit, sides.contains(where: { hit.isDescendant(of: $0.closeButton) }) { return hit }
         return nil
     }
 
     override func layout() {
         super.layout()
-        let h = bounds.height
-        let left: CGFloat = 20
-        closeButton.frame = NSRect(x: bounds.width - 40, y: (h - 22) / 2, width: 22, height: 22)
-        let right = closeButton.isHidden ? bounds.width - 18 : bounds.width - 44
-        let half = max(0, (right - left - 9) / 2)
-        sides[0].frame = NSRect(x: left, y: 0, width: half, height: h)
-        sides[1].frame = NSRect(x: left + half + 9, y: 0, width: half, height: h)
-        middle = left + half + 4.5
+        let left: CGFloat = 20, right = bounds.width - 18
+        let count = CGFloat(max(1, sides.count))
+        let width = max(0, (right - left - Self.gap * (count - 1)) / count)
+        for (index, side) in sides.enumerated() {
+            side.frame = NSRect(x: left + CGFloat(index) * (width + Self.gap), y: 0, width: width, height: bounds.height)
+        }
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.separatorColor.setFill()
-        NSRect(x: middle - 0.5, y: (bounds.height - 16) / 2, width: 1, height: 16).fill()
+        for side in sides.dropLast() {
+            NSRect(x: side.frame.maxX + Self.gap / 2 - 0.5, y: (bounds.height - 16) / 2, width: 1, height: 16).fill()
+        }
     }
 
     override func viewDidMoveToWindow() {
@@ -413,15 +419,24 @@ final class SplitCell: NSTableCellView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { hovering = isUnderPointer }
-    override func mouseMoved(with event: NSEvent) { if hovering != isUnderPointer { hovering.toggle() } }
-    override func mouseExited(with event: NSEvent) { hovering = false }
-
-    @objc private func closeTapped() { onClose?() }
+    override func mouseEntered(with event: NSEvent) { refreshHover() }
+    override func mouseMoved(with event: NSEvent) { refreshHover() }
+    override func mouseExited(with event: NSEvent) { hovered = nil }
 }
 
-/// One side of a split's row: the tab's icon (a spinner while it loads) and its title.
+/// One side of a split's row: the tab's icon (a spinner while it loads), its title, and its close button while the
+/// pointer is on it. Too narrow for a title (three or four tabs in a narrow sidebar), it shows the icon alone.
 private final class SplitSide: NSView {
+    let closeButton = ChromeButton(symbol: "xmark", tip: L("tab.close"), size: 10)
+    var onClose: (() -> Void)?
+    var showsClose = false {
+        didSet {
+            guard showsClose != oldValue else { return }
+            closeButton.isHidden = !showsClose
+            needsLayout = true
+        }
+    }
+
     private let icon = NSImageView()
     private let title = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
@@ -438,19 +453,28 @@ private final class SplitSide: NSView {
         spinner.style = .spinning
         spinner.controlSize = .small
         spinner.isDisplayedWhenStopped = false
-        for view in [icon, spinner, title] as [NSView] { addSubview(view) }
+        closeButton.isHidden = true
+        closeButton.target = self
+        closeButton.action = #selector(closeTapped)
+        for view in [icon, spinner, title, closeButton] as [NSView] { addSubview(view) }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// Only the close button takes presses.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        if let hit, hit.isDescendant(of: closeButton) { return hit }
+        return nil
+    }
 
-    func configure(title text: String, icon image: NSImage?, loaded: Bool, loading: Bool, strong: Bool) {
+    func configure(title text: String, icon image: NSImage?, loaded: Bool, loading: Bool, strong: Bool, closeTip: String) {
         icon.image = image ?? NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
         icon.contentTintColor = image == nil ? .tertiaryLabelColor : nil
         icon.alphaValue = loaded ? 1 : 0.6
         title.stringValue = text
         title.textColor = loaded && strong ? .labelColor : .secondaryLabelColor
+        closeButton.toolTip = closeTip
         if loading { spinner.startAnimation(nil); icon.isHidden = true } else { spinner.stopAnimation(nil); icon.isHidden = false }
     }
 
@@ -459,9 +483,14 @@ private final class SplitSide: NSView {
         let h = bounds.height
         icon.frame = NSRect(x: 0, y: (h - 16) / 2, width: 16, height: 16)
         spinner.frame = icon.frame
+        closeButton.frame = NSRect(x: bounds.width - 20, y: (h - 20) / 2, width: 20, height: 20)
+        title.isHidden = bounds.width < 64
+        let end = showsClose ? closeButton.frame.minX - 2 : bounds.width
         let textHeight = ceil(title.cell?.cellSize.height ?? 17)
-        title.frame = NSRect(x: 22, y: floor((h - textHeight) / 2), width: max(0, bounds.width - 22), height: textHeight)
+        title.frame = NSRect(x: 22, y: floor((h - textHeight) / 2), width: max(0, end - 22), height: textHeight)
     }
+
+    @objc private func closeTapped() { onClose?() }
 }
 
 final class DividerCell: NSTableCellView {
