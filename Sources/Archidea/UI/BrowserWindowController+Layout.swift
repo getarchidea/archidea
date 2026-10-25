@@ -88,6 +88,7 @@ extension BrowserWindowController {
     /// The space's colour, its strength and its light or dark window. The sidebar's text follows how light
     /// the tinted background really is, so it stays readable on a pale mint as on a deep purple.
     func applyTheme(of target: Space) {
+        if target === space { refreshStartPage() }
         let tint = NSColor(hex: target.colorHex)
         let strength = CGFloat(target.tintStrength ?? Double(Theme.tintAlpha))
         root.tintStrength = strength

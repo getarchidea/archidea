@@ -405,7 +405,11 @@
 "update.error.unreachable" = "Не удалось связаться с GitHub. Проверьте подключение к интернету и попробуйте через пару минут.";
 "update.error.server" = "GitHub вернул обновление с ошибкой. Попробуйте через пару минут.";
 "update.error.damaged" = "Скачанное обновление не прошло проверку, поэтому не установлено. Archidea попробует ещё раз позже.";
-"start.closed" = "Недавно закрытые";
+"start.private" = "Приватное окно";
+"start.hint.newTab" = "Новая вкладка";
+"start.hint.reopen" = "Вернуть закрытую";
+"start.hint.split" = "Сплит";
+"start.hint.sidebar" = "Сайдбар";
 "elsewhere.title" = "Открыта в другом окне";
 "elsewhere.show" = "Показать окно";
 "elsewhere.move" = "Перенести сюда";
@@ -416,7 +420,6 @@
 "split.addLeft" = "Добавить слева";
 "split.addRight" = "Добавить справа";
 "menu.splitView" = "Новый сплит";
-"start.hide" = "Убрать со стартовой страницы";
 "update.downloading" = "Скачивается Archidea %@";
 "update.downloading.detail" = "Как только загрузится, внизу сайдбара появится кнопка перезапуска.";
 "space.delete.title" = "Удалить «%@»?";

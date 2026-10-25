@@ -5,6 +5,10 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **A calmer start page**: the space you're in, a search field and the few keys worth knowing, on a soft wash of the
+  space's colour. The most visited sites and recently closed tabs are gone from it: they're in History and on ⇧⌘T,
+  and favourites are pinned in the sidebar.
+
 ## [0.3.0] - 2026-10-25
 
 - **Split view**: up to four tabs side by side in one window, one row in the sidebar. Drag a tab from the sidebar

@@ -405,7 +405,11 @@
 "update.error.unreachable" = "Couldn’t reach GitHub. Check your internet connection and try again in a few minutes.";
 "update.error.server" = "GitHub didn’t return the update properly. Try again in a few minutes.";
 "update.error.damaged" = "The downloaded update didn’t pass verification, so it wasn’t installed. Archidea will try again later.";
-"start.closed" = "Recently Closed";
+"start.private" = "Private Window";
+"start.hint.newTab" = "New tab";
+"start.hint.reopen" = "Reopen closed tab";
+"start.hint.split" = "Split view";
+"start.hint.sidebar" = "Sidebar";
 "elsewhere.title" = "Open in another window";
 "elsewhere.show" = "Show Window";
 "elsewhere.move" = "Move Here";
@@ -416,7 +420,6 @@
 "split.addLeft" = "Add left split";
 "split.addRight" = "Add right split";
 "menu.splitView" = "New Split View";
-"start.hide" = "Remove from Start Page";
 "update.downloading" = "Downloading Archidea %@";
 "update.downloading.detail" = "It’s on its way; a Restart button shows in the sidebar once it’s ready.";
 "space.delete.title" = "Delete “%@”?";

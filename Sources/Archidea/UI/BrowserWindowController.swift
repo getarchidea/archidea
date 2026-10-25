@@ -268,13 +268,6 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             select(item, cause: "moved-here")
         }
         emptyState.onSearch = { [weak self] in self?.showCommandBar(editing: false) }
-        emptyState.onOpen = { [weak self] url in self?.openInNewTab(url) }
-        emptyState.onReopen = { [weak self] index in self?.reopenClosedTab(at: index) }
-        emptyState.onHide = { [weak self] host in
-            guard let self else { return }
-            updateSettings { $0.hiddenTopSites.append(host) }
-            refreshStartPage()
-        }
         content.onLayout = { [weak self] in
             guard let self else { return }
             elsewherePage.frame = content.bounds
@@ -1085,22 +1078,9 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     // MARK: recently closed
 
-    /// The start page's contents, refreshed whenever it shows; history is read again if it's gone stale.
-    private func refreshStartPage() {
-        let fill = { [weak self] in
-            guard let self, !emptyState.isHidden else { return }
-            let sites = isPrivate ? [] : history.topSites(limit: 8, hidden: Set(settings.hiddenTopSites))
-            let closed = state.recentlyClosed.suffix(4).reversed().map { StartPage.Closed(url: $0.url, title: $0.customTitle ?? $0.title) }
-            emptyState.show(sites: sites, closed: closed)
-        }
-        fill()
-        if !isPrivate { history.refresh(then: fill) }
-    }
-
-    /// One of the start page's recently closed tabs, counted from the newest.
-    func reopenClosedTab(at index: Int) {
-        guard state.bringForward(closedAt: index) else { return }
-        reopenClosedTab()
+    /// The start page shows the space the window is in: when it shows, and when the space or its look changes.
+    func refreshStartPage() {
+        emptyState.show(space, isPrivate: isPrivate)
     }
 
     /// ⇧⌘T: the newest closed tab comes back, a pin to its place, in its own space.
@@ -1196,6 +1176,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     func rename(_ target: Space) {
         ask(L("space.rename.title"), placeholder: target.name, value: target.name, confirm: L("space.rename.confirm")) { [weak self] name in
             target.name = name
+            self?.refreshStartPage()
             self?.reloadSidebar()
             self?.store.setNeedsSave()
         }
