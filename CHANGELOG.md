@@ -12,6 +12,9 @@ under *What's new*.
 - Switching spaces, the sidebar's list and header no longer slide out over the page: they stay inside the sidebar.
 - Folders open and close faster (about a sixth of a second), starting at once and easing to a stop, instead of
   starting slowly.
+- The back and forward buttons list the tab's history: hold one, or right-click it, and pick a page; with ⌘ it opens
+  in a new tab instead. A middle click or ⌘-click on the button opens the previous (or next) page in a new tab behind
+  the one you're on.
 
 ## [0.3.0] - 2026-10-25
 

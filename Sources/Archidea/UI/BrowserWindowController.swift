@@ -862,6 +862,18 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         select(item, cause: "new-tab")
     }
 
+    /// `url` opens in a new tab behind the page in front: right above it in Today, like a page it opened (from a pin,
+    /// at the top of Today). It loads once it's picked.
+    func openInBackground(_ url: String, title: String = "") {
+        guard !url.isEmpty else { return }
+        let item = SidebarItem(tab: url, title: title)
+        let index = activeItem.flatMap { front in space.today.firstIndex { $0 === space.row(of: front) } } ?? 0
+        space.today.insert(item, at: index)
+        Trace.log("opened \(Trace.site(url)) in a tab behind")
+        reloadSidebar()
+        store.setNeedsSave()
+    }
+
     func navigate(_ input: String) {
         guard let item = activeItem, !item.isFolder else { return openInNewTab(input) }
         let url = URLInput.resolve(input)

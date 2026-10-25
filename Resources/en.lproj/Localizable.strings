@@ -162,9 +162,9 @@
 "settings.title" = "Settings";
 "settings.unload" = "Free memory of tabs unused for";
 "settings.unload.detail" = "They stay in the sidebar and reload when you open them.";
-"sidebar.back.tip" = "Back (⌘[)";
+"sidebar.back.tip" = "Back (⌘[). Hold for history";
 "sidebar.extensions.tip" = "Extensions";
-"sidebar.forward.tip" = "Forward (⌘])";
+"sidebar.forward.tip" = "Forward (⌘]). Hold for history";
 "sidebar.newFolder" = "New Folder";
 "sidebar.newSpace.tip" = "New Space (⌃⌘N)";
 "sidebar.newTab" = "New Tab";

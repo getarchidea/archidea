@@ -17,6 +17,20 @@ extension BrowserWindowController {
     func sidebarBack() { activeTab?.goBack() }
     func sidebarForward() { activeTab?.goForward() }
     func sidebarReload() { activeTab?.reload() }
+
+    func sidebarHistory(forward: Bool) -> [NavigationEntry] {
+        guard let entries = activeTab?.navigationEntries,
+              let current = entries.firstIndex(where: { ($0["current"] as? Bool) == true }) else { return [] }
+        let indices = forward ? Array(entries.indices[(current + 1)...]) : Array(entries.indices[..<current].reversed())
+        return indices.map { index in
+            NavigationEntry(title: entries[index]["title"] as? String ?? "", url: entries[index]["url"] as? String ?? "",
+                            offset: index - current)
+        }
+    }
+
+    func sidebarGo(by offset: Int) { activeTab?.go(toOffset: Int32(offset)) }
+    func sidebarOpenInBackground(_ entry: NavigationEntry) { openInBackground(entry.url, title: entry.title) }
+    func sidebarShowHistory() { openInNewTab("chrome://history") }
     func sidebarToggle() { toggleSidebar() }
     func sidebarSwitch(to target: Space) { switchSpace(to: target) }
     func sidebarNewSpace() { newSpace() }

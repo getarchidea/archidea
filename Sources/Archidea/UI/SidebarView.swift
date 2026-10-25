@@ -2,6 +2,13 @@ import AppKit
 import ArchideaCore
 import ArdiaCore
 
+/// A page in the tab's history, for the back and forward buttons' menus: `offset` steps from the page in front.
+struct NavigationEntry {
+    let title: String
+    let url: String
+    let offset: Int
+}
+
 protocol SidebarViewDelegate: AnyObject {
     func sidebarSelect(_ item: SidebarItem, cause: String)
     func sidebarDownloads(from view: NSView)
@@ -24,6 +31,11 @@ protocol SidebarViewDelegate: AnyObject {
     func sidebarSiteControls(from view: NSView)
     func sidebarBack()
     func sidebarForward()
+    /// The pages behind the one in front (`forward`: ahead of it), nearest first.
+    func sidebarHistory(forward: Bool) -> [NavigationEntry]
+    func sidebarGo(by offset: Int)
+    func sidebarOpenInBackground(_ entry: NavigationEntry)
+    func sidebarShowHistory()
     func sidebarReload()
     func sidebarToggle()
     func sidebarSwitch(to space: Space)
@@ -77,8 +89,8 @@ final class SidebarView: NSView, WindowDragSurface {
     private let slideClip = SlideClip()
     private let cardTint = CardTint()
     private let toggleButton = ChromeButton(symbol: "sidebar.left", tip: L("sidebar.toggle.tip"))
-    private let backButton = ChromeButton(symbol: "arrow.left", tip: L("sidebar.back.tip"))
-    private let forwardButton = ChromeButton(symbol: "arrow.right", tip: L("sidebar.forward.tip"))
+    private let backButton = NavigationButton(symbol: "arrow.left", tip: L("sidebar.back.tip"))
+    private let forwardButton = NavigationButton(symbol: "arrow.right", tip: L("sidebar.forward.tip"))
     private let reloadButton = ChromeButton(symbol: "arrow.clockwise", tip: L("sidebar.reload.tip"))
     private let address = AddressPill()
     private let header = SpaceHeader()
@@ -143,6 +155,16 @@ final class SidebarView: NSView, WindowDragSurface {
             addSubview(button)
         }
         downloadsButton.isHidden = true
+        for (button, forward) in [(backButton, false), (forwardButton, true)] {
+            button.onOpenInNewTab = { [weak self] in
+                guard let entry = self?.delegate?.sidebarHistory(forward: forward).first else { return }
+                self?.delegate?.sidebarOpenInBackground(entry)
+            }
+            button.onMenu = { [weak self, weak button] in
+                guard let button else { return }
+                self?.showHistory(forward: forward, from: button)
+            }
+        }
 
         address.onClick = { [weak self] in self?.delegate?.sidebarAddressClicked() }
         address.onCopy = { [weak self] in
@@ -404,6 +426,68 @@ final class SidebarView: NSView, WindowDragSurface {
     @objc private func backTapped() { delegate?.sidebarBack() }
     @objc private func forwardTapped() { delegate?.sidebarForward() }
     @objc private func reloadTapped() { delegate?.sidebarReload() }
+
+    /// The pages behind the one in front (or ahead of it), nearest first, under the button: one picked goes there,
+    /// picked with ⌘ it opens in a new tab behind this one. Then the whole history.
+    private func showHistory(forward: Bool, from button: NSView) {
+        guard let delegate else { return }
+        let menu = NSMenu()
+        for entry in delegate.sidebarHistory(forward: forward).prefix(15) {
+            var title = entry.title.isEmpty ? URL(string: entry.url)?.host ?? entry.url : entry.title
+            if title.count > 60 { title = String(title.prefix(59)) + "…" }
+            let item = ClosureMenuItem(title) { [weak self] in
+                if NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+                    self?.delegate?.sidebarOpenInBackground(entry)
+                } else {
+                    self?.delegate?.sidebarGo(by: entry.offset)
+                }
+            }
+            let icon = (Favicons.shared.cached(entry.url)?.copy() as? NSImage)
+                ?? NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
+            icon?.size = NSSize(width: 16, height: 16)
+            item.image = icon
+            item.toolTip = entry.url
+            menu.addItem(item)
+        }
+        if !menu.items.isEmpty { menu.addItem(.separator()) }
+        menu.addItem(ClosureMenuItem(L("menu.history")) { [weak self] in self?.delegate?.sidebarShowHistory() })
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.isFlipped ? button.bounds.maxY + 4 : -4), in: button)
+    }
+}
+
+/// Back and forward. A click goes; a ⌘-click or a middle click opens that page in a new tab behind this one; held a
+/// moment, or right-clicked, it lists the pages that way, as Safari's and Chrome's do.
+final class NavigationButton: ChromeButton {
+    var onOpenInNewTab: (() -> Void)?
+    var onMenu: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        if event.modifierFlags.contains(.command) {
+            onOpenInNewTab?()
+            return
+        }
+        // Let go soon over the button: a click. Still held: the menu, which the pointer can go on into.
+        isHighlighted = true
+        let released = window?.nextEvent(matching: .leftMouseUp, until: Date(timeIntervalSinceNow: 0.4), inMode: .eventTracking,
+                                         dequeue: true)
+        isHighlighted = false
+        guard let released else {
+            onMenu?()
+            return
+        }
+        if bounds.contains(convert(released.locationInWindow, from: nil)) { sendAction(action, to: target) }
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        if isEnabled { onMenu?() }
+    }
+
+    override func otherMouseDown(with event: NSEvent) {}
+
+    override func otherMouseUp(with event: NSEvent) {
+        if isEnabled, event.buttonNumber == 2 { onOpenInNewTab?() }
+    }
 }
 
 // MARK: - the floating card
