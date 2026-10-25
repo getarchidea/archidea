@@ -255,7 +255,7 @@ final class SidebarCell: NSTableCellView, HoverTracking {
         }
         count.stringValue = newCount > 0 ? "\(newCount)" : ""
         count.isHidden = newCount == 0
-        soundButton.sound = sound
+        soundButton.tabSound = sound
         needsLayout = true
         if loading && !item.isFolder { spinner.startAnimation(nil); icon.isHidden = true } else { spinner.stopAnimation(nil); icon.isHidden = false }
         self.closable = closable
@@ -520,7 +520,7 @@ private final class SplitSide: NSView {
 
     func configure(title text: String, icon image: NSImage?, loaded: Bool, loading: Bool, strong: Bool, closeTip: String,
                    sound: TabSound) {
-        soundButton.sound = sound
+        soundButton.tabSound = sound
         needsLayout = true
         icon.image = image ?? NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
         icon.contentTintColor = image == nil ? .tertiaryLabelColor : nil
@@ -555,13 +555,13 @@ private final class SplitSide: NSView {
 final class SoundButton: ChromeButton {
     var onClick: (() -> Void)?
 
-    var sound = TabSound.silent {
+    var tabSound = TabSound.silent {
         didSet {
-            isHidden = sound == .silent
-            guard sound != oldValue, sound != .silent else { return }
-            setSymbol(sound == .muted ? "speaker.slash.fill" : "speaker.wave.2.fill", size: 10)
-            contentTintColor = sound == .muted ? .tertiaryLabelColor : .secondaryLabelColor
-            toolTip = sound == .muted ? L("tab.unmute") : L("tab.mute")
+            isHidden = tabSound == .silent
+            guard tabSound != oldValue, tabSound != .silent else { return }
+            setSymbol(tabSound == .muted ? "speaker.slash.fill" : "speaker.wave.2.fill", size: 10)
+            contentTintColor = tabSound == .muted ? .tertiaryLabelColor : .secondaryLabelColor
+            toolTip = tabSound == .muted ? L("tab.unmute") : L("tab.mute")
         }
     }
 
