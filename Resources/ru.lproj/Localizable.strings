@@ -313,6 +313,10 @@
 "onboarding.reopen" = "Вернуть закрытую вкладку";
 "permission.wants" = "Запрашивает доступ: %@";
 "permission.once" = "Один раз";
+"location.off.title" = "Геопозиция для Archidea выключена в macOS";
+"location.off.detail" = "Сайты не получат её, пока она не включена в Системных настройках › Конфиденциальность и безопасность › Службы геолокации.";
+"location.off.open" = "Открыть настройки";
+"location.off.later" = "Не сейчас";
 "password.username" = "Имя пользователя";
 "extensions.install.source" = "Chrome Web Store";
 "menu.checkUpdates" = "Проверить обновления…";

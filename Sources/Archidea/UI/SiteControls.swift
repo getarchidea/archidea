@@ -241,6 +241,8 @@ final class SiteControls: NSViewController {
             if case let .failure(failure) = result { Trace.log("site setting \(type)=\(value): \(failure)") }
         }
         if type == "sound" { tab.muted = value == "block" }
+        // As from the site's own card: the site has the location once macOS lets Archidea have it.
+        if type == "location", value == "allow" { LocationAccess.shared.ensure { _ in } }
     }
 
     private func clearSiteData() {

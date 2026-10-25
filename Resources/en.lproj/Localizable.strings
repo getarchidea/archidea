@@ -313,6 +313,10 @@
 "onboarding.reopen" = "Reopen closed tab";
 "permission.wants" = "Wants to use your %@";
 "permission.once" = "Allow Once";
+"location.off.title" = "Location is off for Archidea in macOS";
+"location.off.detail" = "Sites can't get your location until it's on in System Settings › Privacy & Security › Location Services.";
+"location.off.open" = "Open Settings";
+"location.off.later" = "Not Now";
 "password.username" = "Username";
 "extensions.install.source" = "Chrome Web Store";
 "menu.checkUpdates" = "Check for Updates…";

@@ -349,9 +349,17 @@ extension SitePrompts {
     func addPermissionRequest(_ request: [String: Any], tab: ArdiaCoreTab) {
         let id = request["id"] as? String ?? ""
         let origin = request["origin"] as? String ?? ""
-        let kinds = (request["permissions"] as? [String] ?? []).map(Prompts.permissionName).joined(separator: ", ")
-        let resolve = { (result: String, remember: Bool) in
+        let permissions = request["permissions"] as? [String] ?? []
+        let kinds = permissions.map(Prompts.permissionName).joined(separator: ", ")
+        Trace.log("site asks for \(permissions.joined(separator: ", "))")
+        let asksLocation = permissions.contains { $0 == "location" || $0 == "geolocation" }
+        let resolve = { [weak self, weak tab] (result: String, remember: Bool) in
             ArdiaCoreEngine.shared?.resolvePermission(id, result: result, remember: remember)
+            // The site has it once macOS lets Archidea have it too: asked the first time, and said when it's off.
+            guard asksLocation, result == "accept" else { return }
+            LocationAccess.shared.ensure { allowed in
+                if !allowed { self?.addLocationOff(tab: tab) }
+            }
         }
         add(.init(id: id, tab: tab, belongsToTab: true, icon: tab.favicon, host: URL(string: origin)?.host ?? origin,
                   title: L("permission.wants", kinds), buttons: [
@@ -359,6 +367,16 @@ extension SitePrompts {
                       .init(title: L("permission.once"), style: .secondary) { _ in resolve("accept", false) },
                       .init(title: L("permission.allow"), style: .primary) { _ in resolve("accept", true) },
                   ], dismissed: { resolve("dismiss", false) }))
+    }
+
+    /// macOS has the location off for Archidea (or for the whole Mac): the site waits for a position that won't come.
+    private func addLocationOff(tab: ArdiaCoreTab?) {
+        add(.init(id: "location-off", tab: tab, belongsToTab: tab != nil,
+                  icon: NSImage(systemSymbolName: "location.slash", accessibilityDescription: nil), host: L("app.name"),
+                  title: L("location.off.title"), detail: L("location.off.detail"), buttons: [
+                      .init(title: L("location.off.later"), style: .secondary) { _ in },
+                      .init(title: L("location.off.open"), style: .primary) { _ in LocationAccess.openSettings() },
+                  ], dismissed: {}))
     }
 
     /// A page wants to open another app (a `zoommtg:` or `slack:` link).
