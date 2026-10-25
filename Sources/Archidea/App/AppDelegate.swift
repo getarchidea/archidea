@@ -290,6 +290,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func goBack(_ sender: Any?) { activePage?.goBack() }
     @objc func goForward(_ sender: Any?) { activePage?.goForward() }
     @objc func find(_ sender: Any?) { current?.showFind() }
+
+    /// Chrome's own commands for the page (its IDC_ numbers): Save Page As, Print with its preview and Save as PDF,
+    /// and Print straight to the system's dialog.
+    @objc func savePage(_ sender: Any?) { activePage?.executeChromeCommand(35004) }
+    @objc func printPage(_ sender: Any?) { activePage?.executeChromeCommand(35003) }
+    @objc func printWithSystemDialog(_ sender: Any?) { activePage?.executeChromeCommand(35007) }
     @objc func copyURL(_ sender: Any?) {
         if let mini = keyMini {
             NSPasteboard.general.clearContents()

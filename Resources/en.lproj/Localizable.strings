@@ -36,6 +36,9 @@
 "menu.actualSize" = "Actual Size";
 "menu.app" = "Archidea";
 "menu.back" = "Back";
+"menu.savePage" = "Save Page As…";
+"menu.print" = "Print…";
+"menu.printSystem" = "Print Using System Dialog…";
 "menu.closeTab" = "Close Tab";
 "menu.closeWindow" = "Close Window";
 "menu.copy" = "Copy";

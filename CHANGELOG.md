@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- ⌘P prints the page, with a preview and *Save as PDF*; ⌥⌘P goes straight to the system's print dialog, and ⇧⌘S saves
+  the page. The File menu has all three. There was no way to print before.
+
 ## [0.3.0] - 2026-10-25
 
 - **Split view**: up to four tabs side by side in one window, one row in the sidebar. Drag a tab from the sidebar
