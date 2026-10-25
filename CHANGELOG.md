@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-25
+
 - **Split view**: up to four tabs side by side in one window, one row in the sidebar. Drag a tab from the sidebar
   onto a page: a card shows whether it goes to that page's left or right. Or choose *Open in Split View* from a tab's
   menu, or press ⌥⌘\ to open a new one beside the page. Each page is a card of its own, and an outline marks the one
@@ -14,8 +16,9 @@ under *What's new*.
   Splits can be pinned and put in folders like tabs.
 - The two-finger swipe between spaces keeps up with the fingers and lands in one movement. The sidebar was laid out
   again on every step of the swipe, and the list came back for a moment before the next space slid in.
-- Sites get your location. The first time you let one have it, Archidea asks macOS for it; when macOS has location
-  off for Archidea, a card says so and opens the setting. Before, macOS was never asked and the site waited in vain.
+- Location for sites: the first time you let a site have it, Archidea asks macOS too, and macOS shows its own dialog.
+  Before, macOS was never asked and the site waited until it gave up. When macOS has location off for Archidea, a
+  card says so and opens the setting.
 
 ## [0.2.0] - 2026-10-24
 
