@@ -5,12 +5,28 @@ under *What's new*.
 
 ## [Unreleased]
 
-- Hover no longer sticks to rows that scrolled away from under the pointer, in the sidebar, the icon and emoji picker
-  and the downloads list: it follows the pointer while scrolling.
+## [0.4.0] - 2026-10-25
 
-- Switching spaces, the sidebar's list and header no longer slide out over the page: they stay inside the sidebar.
+- **Live folders**: *Follow Updates* on a tab (or in the controls behind the address, or File › New Live Folder) turns
+  the site into a folder among the pins that fills itself with its latest posts, videos or releases, from the feed the
+  site publishes. It's checked every half hour while Archidea runs; what came in since you last looked has a dot, and
+  the folder counts it. A post you close doesn't come back, and only the latest 30 stay. The folder's menu checks
+  now, marks everything read, or stops following and keeps it as a plain folder.
+- **A calmer start page**: the space you're in, a search field and the few keys worth knowing, on a soft wash of the
+  space's colour. The most visited sites and recently closed tabs are gone from it: they're in History and on ⇧⌘T,
+  and favourites are pinned in the sidebar.
+- ⌘P prints the page, with a preview and *Save as PDF*; ⌥⌘P goes straight to the system's print dialog, and ⇧⌘S saves
+  the page. The File menu has all three. There was no way to print before.
+- The back and forward buttons list the tab's history: hold one, or right-click it, and pick a page; with ⌘ it opens
+  in a new tab instead. A middle click or ⌘-click on the button opens the previous (or next) page in a new tab behind
+  the one you're on.
+- Deleting a folder deletes what's in it, instead of leaving its tabs where it was. One that holds tabs asks first,
+  and ⇧⌘T brings them back; a live folder's posts just go.
 - Folders open and close faster (about a sixth of a second), starting at once and easing to a stop, instead of
   starting slowly.
+- Switching spaces, the sidebar's list and header no longer slide out over the page: they stay inside the sidebar.
+- Hover no longer sticks to rows that scrolled away from under the pointer, in the sidebar, the icon and emoji picker
+  and the downloads list: it follows the pointer while scrolling.
 
 ## [0.3.0] - 2026-10-25
 

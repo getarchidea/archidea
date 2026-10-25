@@ -268,13 +268,6 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
             select(item, cause: "moved-here")
         }
         emptyState.onSearch = { [weak self] in self?.showCommandBar(editing: false) }
-        emptyState.onOpen = { [weak self] url in self?.openInNewTab(url) }
-        emptyState.onReopen = { [weak self] index in self?.reopenClosedTab(at: index) }
-        emptyState.onHide = { [weak self] host in
-            guard let self else { return }
-            updateSettings { $0.hiddenTopSites.append(host) }
-            refreshStartPage()
-        }
         content.onLayout = { [weak self] in
             guard let self else { return }
             elsewherePage.frame = content.bounds
@@ -528,6 +521,11 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         }
         windowState.select(item.id, in: space)
         item.lastActive = Date()
+        if item.isUnread {
+            // Opened, a live folder's new tab isn't new any more: in every window, and in its folder's count.
+            item.isUnread = false
+            reloadSidebar()
+        }
         if let split = space.split(containing: item) {
             split.lastActive = item.lastActive
             lastSide[split.id] = item.id
@@ -862,6 +860,18 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         select(item, cause: "new-tab")
     }
 
+    /// `url` opens in a new tab behind the page in front: right above it in Today, like a page it opened (from a pin,
+    /// at the top of Today). It loads once it's picked.
+    func openInBackground(_ url: String, title: String = "") {
+        guard !url.isEmpty else { return }
+        let item = SidebarItem(tab: url, title: title)
+        let index = activeItem.flatMap { front in space.today.firstIndex { $0 === space.row(of: front) } } ?? 0
+        space.today.insert(item, at: index)
+        Trace.log("opened \(Trace.site(url)) in a tab behind")
+        reloadSidebar()
+        store.setNeedsSave()
+    }
+
     func navigate(_ input: String) {
         guard let item = activeItem, !item.isFolder else { return openInNewTab(input) }
         let url = URLInput.resolve(input)
@@ -937,6 +947,32 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         space.remove(item)
         if wasActive {
             windowState.select(nil, in: space)
+            show(nil)
+        }
+        reloadSidebar()
+        store.setNeedsSave()
+    }
+
+    /// A folder goes with everything in it: its tabs close, and ⇧⌘T brings back the ones that were the person's own.
+    /// One holding such tabs asks first; a live folder's entries are only its feed's and go without asking.
+    func deleteFolder(_ folder: SidebarItem) {
+        let own = folder.allTabs.filter { $0.entryID == nil }.count
+        guard own > 0 else { return deleteFolderNow(folder) }
+        confirm(host: folder.title, icon: Glyphs.image(folder.icon ?? "folder", filled: true, pointSize: 15),
+                title: L("folder.delete.title", folder.title), detail: L("folder.delete.detail", plural("count.tabs", own)),
+                confirm: L("folder.delete.confirm")) { [weak self] in self?.deleteFolderNow(folder) }
+    }
+
+    private func deleteFolderNow(_ folder: SidebarItem) {
+        guard let owner = state.space(containing: folder) else { return }
+        let tabs = folder.allTabs
+        let wasActive = tabs.contains { $0 === activeItem }
+        // Remembered while they still have their place, to come back among the pins.
+        for tab in tabs where tab.entryID == nil { state.remember(tab) }
+        unloadTab(folder)
+        owner.remove(folder)
+        if wasActive {
+            windowState.select(nil, in: owner)
             show(nil)
         }
         reloadSidebar()
@@ -1085,22 +1121,9 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     // MARK: recently closed
 
-    /// The start page's contents, refreshed whenever it shows; history is read again if it's gone stale.
-    private func refreshStartPage() {
-        let fill = { [weak self] in
-            guard let self, !emptyState.isHidden else { return }
-            let sites = isPrivate ? [] : history.topSites(limit: 8, hidden: Set(settings.hiddenTopSites))
-            let closed = state.recentlyClosed.suffix(4).reversed().map { StartPage.Closed(url: $0.url, title: $0.customTitle ?? $0.title) }
-            emptyState.show(sites: sites, closed: closed)
-        }
-        fill()
-        if !isPrivate { history.refresh(then: fill) }
-    }
-
-    /// One of the start page's recently closed tabs, counted from the newest.
-    func reopenClosedTab(at index: Int) {
-        guard state.bringForward(closedAt: index) else { return }
-        reopenClosedTab()
+    /// The start page shows the space the window is in: when it shows, and when the space or its look changes.
+    func refreshStartPage() {
+        emptyState.show(space, isPrivate: isPrivate)
     }
 
     /// ⇧⌘T: the newest closed tab comes back, a pin to its place, in its own space.
@@ -1196,6 +1219,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     func rename(_ target: Space) {
         ask(L("space.rename.title"), placeholder: target.name, value: target.name, confirm: L("space.rename.confirm")) { [weak self] name in
             target.name = name
+            self?.refreshStartPage()
             self?.reloadSidebar()
             self?.store.setNeedsSave()
         }

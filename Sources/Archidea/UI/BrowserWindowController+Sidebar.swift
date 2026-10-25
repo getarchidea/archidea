@@ -17,6 +17,20 @@ extension BrowserWindowController {
     func sidebarBack() { activeTab?.goBack() }
     func sidebarForward() { activeTab?.goForward() }
     func sidebarReload() { activeTab?.reload() }
+
+    func sidebarHistory(forward: Bool) -> [NavigationEntry] {
+        guard let entries = activeTab?.navigationEntries,
+              let current = entries.firstIndex(where: { ($0["current"] as? Bool) == true }) else { return [] }
+        let indices = forward ? Array(entries.indices[(current + 1)...]) : Array(entries.indices[..<current].reversed())
+        return indices.map { index in
+            NavigationEntry(title: entries[index]["title"] as? String ?? "", url: entries[index]["url"] as? String ?? "",
+                            offset: index - current)
+        }
+    }
+
+    func sidebarGo(by offset: Int) { activeTab?.go(toOffset: Int32(offset)) }
+    func sidebarOpenInBackground(_ entry: NavigationEntry) { openInBackground(entry.url, title: entry.title) }
+    func sidebarShowHistory() { openInNewTab("chrome://history") }
     func sidebarToggle() { toggleSidebar() }
     func sidebarSwitch(to target: Space) { switchSpace(to: target) }
     func sidebarNewSpace() { newSpace() }
@@ -48,14 +62,7 @@ extension BrowserWindowController {
         store.setNeedsSave()
     }
 
-    func sidebarDeleteFolder(_ folder: SidebarItem) {
-        guard let loc = space.location(of: folder) else { return }
-        space.remove(folder)
-        if let parent = loc.parent { parent.children.insert(contentsOf: folder.children, at: loc.index) }
-        else { space.pinned.insert(contentsOf: folder.children, at: loc.index) }
-        reloadSidebar()
-        store.setNeedsSave()
-    }
+    func sidebarDeleteFolder(_ folder: SidebarItem) { deleteFolder(folder) }
 
     func sidebarFavicon(for item: SidebarItem) -> NSImage? {
         if let image = group.liveTab(for: item)?.favicon { return image }
@@ -88,6 +95,11 @@ extension BrowserWindowController {
     func sidebarCanSplit(_ item: SidebarItem) -> Bool { canSplit(with: item.id) }
     func sidebarSplit(_ item: SidebarItem) { split(with: item.id) }
     func sidebarSeparate(_ split: SidebarItem) { separate(split) }
+    func sidebarCanFollow(_ address: String) -> Bool { canFollow(address) }
+    func sidebarFollow(_ address: String) { follow(address) }
+    func sidebarRefreshLive(_ folder: SidebarItem) { refreshLive(folder) }
+    func sidebarMarkRead(_ folder: SidebarItem) { markRead(folder) }
+    func sidebarUnfollow(_ folder: SidebarItem) { unfollow(folder) }
     func sidebarClosePane(_ item: SidebarItem) { closePane(item) }
     func sidebarSwapSides(_ split: SidebarItem) { swapSides(split) }
     func sidebarDragBegan() { dragFromSidebarBegan() }

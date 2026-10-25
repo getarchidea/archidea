@@ -62,6 +62,7 @@ enum Shortcuts {
             item(L("menu.newPrivateWindow"), #selector(AppDelegate.newPrivateWindow), "n", [.command, .shift], reserve: true),
             item(L("menu.openLocation"), #selector(AppDelegate.openLocation), "l", reserve: true),
             item(L("menu.newFolder"), #selector(AppDelegate.newFolder), "n", [.command, .option]),
+            item(L("menu.newLiveFolder"), #selector(AppDelegate.newLiveFolder), ""),
             item(L("menu.newSpace"), #selector(AppDelegate.newSpace), "n", [.command, .control]),
             item(L("menu.import"), #selector(AppDelegate.importData), ""),
             .separator(),
@@ -70,6 +71,10 @@ enum Shortcuts {
             item(L("menu.reopenClosedTab"), #selector(AppDelegate.reopenClosedTab), "t", [.command, .shift], reserve: true),
             item(L("menu.togglePin"), #selector(AppDelegate.togglePin), "d", reserve: true),
             item(L("menu.copyURL"), #selector(AppDelegate.copyURL), "c", [.command, .shift], reserve: true),
+            .separator(),
+            item(L("menu.savePage"), #selector(AppDelegate.savePage), "s", [.command, .shift]),
+            item(L("menu.print"), #selector(AppDelegate.printPage), "p"),
+            item(L("menu.printSystem"), #selector(AppDelegate.printWithSystemDialog), "p", [.command, .option]),
         ])
         menu(L("menu.edit"), [
             item(L("menu.undo"), Selector(("undo:")), "z", nilTarget: true),

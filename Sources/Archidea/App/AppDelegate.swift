@@ -128,6 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showAll()
         }
         IncomingLinks.handler = { [weak self] url in self?.openIncoming(url) }
+        // The live folders start reading their feeds.
+        _ = browser.liveFolders
         #if DRIFT_DEV
         let controller = windows[0]
         SelfTest.runIfRequested(controller)
@@ -290,6 +292,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func goBack(_ sender: Any?) { activePage?.goBack() }
     @objc func goForward(_ sender: Any?) { activePage?.goForward() }
     @objc func find(_ sender: Any?) { current?.showFind() }
+    @objc func newLiveFolder(_ sender: Any?) { current?.newLiveFolder() }
+
+    /// Chrome's own commands for the page (its IDC_ numbers): Save Page As, Print with its preview and Save as PDF,
+    /// and Print straight to the system's dialog.
+    @objc func savePage(_ sender: Any?) { activePage?.executeChromeCommand(35004) }
+    @objc func printPage(_ sender: Any?) { activePage?.executeChromeCommand(35003) }
+    @objc func printWithSystemDialog(_ sender: Any?) { activePage?.executeChromeCommand(35007) }
     @objc func copyURL(_ sender: Any?) {
         if let mini = keyMini {
             NSPasteboard.general.clearContents()
