@@ -953,9 +953,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         store.setNeedsSave()
     }
 
-    /// A folder goes with everything in it: its tabs close, and ⇧⌘T brings them back. One holding tabs asks first.
+    /// A folder goes with everything in it: its tabs close, and ⇧⌘T brings back the ones that were the person's own.
+    /// One holding such tabs asks first; a live folder's entries are only its feed's and go without asking.
     func deleteFolder(_ folder: SidebarItem) {
-        let own = folder.allTabs.count
+        let own = folder.allTabs.filter { $0.entryID == nil }.count
         guard own > 0 else { return deleteFolderNow(folder) }
         confirm(host: folder.title, icon: Glyphs.image(folder.icon ?? "folder", filled: true, pointSize: 15),
                 title: L("folder.delete.title", folder.title), detail: L("folder.delete.detail", plural("count.tabs", own)),
@@ -967,7 +968,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         let tabs = folder.allTabs
         let wasActive = tabs.contains { $0 === activeItem }
         // Remembered while they still have their place, to come back among the pins.
-        tabs.forEach(state.remember)
+        for tab in tabs where tab.entryID == nil { state.remember(tab) }
         unloadTab(folder)
         owner.remove(folder)
         if wasActive {
