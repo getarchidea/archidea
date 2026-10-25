@@ -1,7 +1,9 @@
 import Foundation
 
 public final class SidebarItem: Codable {
-    public enum Kind: String, Codable { case tab, folder }
+    /// A split is two tabs side by side in the window, one row in the sidebar; its `children` are the two tabs,
+    /// the first on the left. A version without splits reads one as a folder holding its two tabs.
+    public enum Kind: String, Codable { case tab, folder, split }
 
     public let id: UUID
     public var kind: Kind
@@ -15,6 +17,8 @@ public final class SidebarItem: Codable {
     public var icon: String?
     /// A name the user gave the tab; the page's own title no longer shows while it's set.
     public var customTitle: String?
+    /// A split's share of the width for its first tab; nil is half.
+    public var splitRatio: Double?
 
     public init(tab url: String, title: String = "") {
         id = UUID()
@@ -24,6 +28,17 @@ public final class SidebarItem: Codable {
         children = []
         expanded = true
         lastActive = Date()
+    }
+
+    /// A split of two tabs, `first` on the left. `Space.makeSplit` puts one in a list.
+    public init(split first: SidebarItem, _ second: SidebarItem) {
+        id = UUID()
+        kind = .split
+        title = ""
+        url = ""
+        children = [first, second]
+        expanded = true
+        lastActive = max(first.lastActive, second.lastActive)
     }
 
     public init(folder title: String) {
@@ -37,7 +52,7 @@ public final class SidebarItem: Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, url, pinnedURL, children, expanded, lastActive, icon, customTitle
+        case id, kind, title, url, pinnedURL, children, expanded, lastActive, icon, customTitle, splitRatio
     }
 
     /// Reads what any version wrote: a field this one doesn't know is skipped, one it lacks takes its default. A value
@@ -55,11 +70,16 @@ public final class SidebarItem: Codable {
         lastActive = try c.decodeIfPresent(Date.self, forKey: .lastActive) ?? Date()
         icon = try c.decodeIfPresent(String.self, forKey: .icon)
         customTitle = try c.decodeIfPresent(String.self, forKey: .customTitle)
+        splitRatio = try? c.decodeIfPresent(Double.self, forKey: .splitRatio)
     }
 
     public var isFolder: Bool { kind == .folder }
+    public var isSplit: Bool { kind == .split }
+    /// A tab of its own (in a split or not), as opposed to a folder or a split.
+    public var isTab: Bool { kind == .tab }
 
     public var displayTitle: String {
+        if isSplit { return children.map(\.displayTitle).joined(separator: " · ") }
         if let customTitle, !customTitle.isEmpty { return customTitle }
         if !title.isEmpty { return title }
         if let host = URL(string: url)?.host { return host }
@@ -70,12 +90,13 @@ public final class SidebarItem: Codable {
     public var traceName: String { "\(kind.rawValue) \(id.uuidString.prefix(8))" }
 
     public var allTabs: [SidebarItem] {
-        isFolder ? children.flatMap(\.allTabs) : [self]
+        isTab ? [self] : children.flatMap(\.allTabs)
     }
 
-    /// A tab among the pins keeps the address it was pinned at, to go back to.
+    /// A tab among the pins keeps the address it was pinned at, to go back to; a pinned split's two tabs both do.
     fileprivate func keepHome() {
-        if !isFolder, pinnedURL == nil { pinnedURL = url }
+        if isSplit { children.forEach { $0.keepHome() } }
+        if isTab, pinnedURL == nil { pinnedURL = url }
     }
 }
 
@@ -131,34 +152,80 @@ public final class Space: Codable {
         return search(pinned) ?? search(today)
     }
 
+    /// Whether the item (or the split it's one side of) is among the pins rather than in Today.
     public func isPinned(_ item: SidebarItem) -> Bool {
-        !today.contains { $0 === item }
+        let row = row(of: item)
+        return !today.contains { $0 === row }
     }
 
-    /// The array (by parent) holding the item: nil parent with `inToday` tells pinned root from today.
+    /// The array (by parent) holding the item: nil parent with `inToday` tells pinned root from today. A split's tab
+    /// has the split as its parent, and is in Today when the split is.
     public func location(of item: SidebarItem) -> (parent: SidebarItem?, inToday: Bool, index: Int)? {
         if let index = today.firstIndex(where: { $0 === item }) { return (nil, true, index) }
         if let index = pinned.firstIndex(where: { $0 === item }) { return (nil, false, index) }
-        func search(_ folder: SidebarItem) -> (SidebarItem, Int)? {
-            if let index = folder.children.firstIndex(where: { $0 === item }) { return (folder, index) }
-            for child in folder.children where child.isFolder {
+        func search(_ container: SidebarItem) -> (SidebarItem, Int)? {
+            if let index = container.children.firstIndex(where: { $0 === item }) { return (container, index) }
+            for child in container.children where !child.isTab {
                 if let found = search(child) { return found }
             }
             return nil
         }
-        for root in pinned where root.isFolder {
+        for root in today where root.isSplit {
+            if let (parent, index) = search(root) { return (parent, true, index) }
+        }
+        for root in pinned where !root.isTab {
             if let (parent, index) = search(root) { return (parent, false, index) }
         }
         return nil
     }
 
+    /// The split `item` is one side of, if it is.
+    public func split(containing item: SidebarItem) -> SidebarItem? {
+        guard let parent = location(of: item)?.parent, parent.isSplit else { return nil }
+        return parent
+    }
+
+    /// The sidebar's row for `item`: its split when it's one side of one, else the item itself.
+    public func row(of item: SidebarItem) -> SidebarItem { split(containing: item) ?? item }
+
+    /// Takes the item out of its list. A split left with one tab gives way to that tab, in its place.
     @discardableResult
     public func remove(_ item: SidebarItem) -> Bool {
         guard let loc = location(of: item) else { return false }
-        if let parent = loc.parent { parent.children.remove(at: loc.index) }
+        if let parent = loc.parent {
+            parent.children.remove(at: loc.index)
+            if parent.isSplit, parent.children.count < 2 { separate(parent) }
+        }
         else if loc.inToday { today.remove(at: loc.index) }
         else { pinned.remove(at: loc.index) }
         return true
+    }
+
+    /// Puts `second` beside `first`, in `first`'s place, as a split; `second` leaves wherever it was in this space.
+    /// Both must be tabs of their own, not in a split already. `second` goes on the left when `secondFirst`.
+    @discardableResult
+    public func makeSplit(_ first: SidebarItem, with second: SidebarItem, secondFirst: Bool = false) -> SidebarItem? {
+        guard first !== second, first.isTab, second.isTab, split(containing: first) == nil, split(containing: second) == nil
+        else { return nil }
+        if location(of: second) != nil { remove(second) }
+        guard let loc = location(of: first) else { return nil }
+        let split = secondFirst ? SidebarItem(split: second, first) : SidebarItem(split: first, second)
+        if let parent = loc.parent { parent.children[loc.index] = split }
+        else if loc.inToday { today[loc.index] = split }
+        else { pinned[loc.index] = split }
+        // Its tabs follow the list's rule: pinned ones keep a home address, Today ones have none.
+        if loc.inToday { split.children.forEach { $0.pinnedURL = nil } } else { split.keepHome() }
+        return split
+    }
+
+    /// Breaks a split into its tabs where it was: the first in its place, the second right after it.
+    public func separate(_ split: SidebarItem) {
+        guard split.isSplit, let loc = location(of: split) else { return }
+        let tabs = split.children
+        split.children = []
+        if let parent = loc.parent { parent.children.replaceSubrange(loc.index...loc.index, with: tabs) }
+        else if loc.inToday { today.replaceSubrange(loc.index...loc.index, with: tabs) }
+        else { pinned.replaceSubrange(loc.index...loc.index, with: tabs) }
     }
 
     public func contains(_ ancestor: SidebarItem, descendant: SidebarItem) -> Bool {
@@ -180,6 +247,7 @@ public final class Space: Codable {
 
     public func slot(of item: SidebarItem) -> Slot? {
         guard let loc = location(of: item) else { return nil }
+        if let parent = loc.parent, parent.isSplit { return slot(of: parent) }
         return loc.parent.map { .folder($0) } ?? (loc.inToday ? .today : .pinned)
     }
 
@@ -192,7 +260,8 @@ public final class Space: Codable {
         case .today where item.isFolder:
             pinned.append(item)
         case .today:
-            item.pinnedURL = nil
+            // A tab, or a split's two tabs.
+            item.allTabs.forEach { $0.pinnedURL = nil }
             today.insert(item, at: clamped(today.count))
         case .pinned:
             item.keepHome()
@@ -309,9 +378,12 @@ public final class AppState: Codable {
         spaces.first { $0.id == window.spaceID } ?? spaces[0]
     }
 
-    /// Whether some window has `item` in front in `space`: a tab like that isn't archived.
+    /// Whether some window has `item` in front in `space` (for a split, either of its tabs): it isn't archived.
     public func isInFront(_ item: SidebarItem, in space: Space) -> Bool {
-        windows.contains { $0.selectedID(in: space) == item.id }
+        windows.contains { window in
+            guard let id = window.selectedID(in: space) else { return false }
+            return id == item.id || item.allTabs.contains { $0.id == id }
+        }
     }
 
     /// Takes a space out, unless it's the last one; windows that showed it show the first space left.
@@ -326,8 +398,8 @@ public final class AppState: Codable {
     }
 
     /// Puts right what an older version (or a bug) may have saved: a folder in Today goes back among the pins, a
-    /// pinned tab gets its home address, a Today tab loses one, every window shows a space that exists and there is
-    /// a window. Returns whether anything changed.
+    /// split holds two tabs, a pinned tab gets its home address, a Today tab loses one, every window shows a space
+    /// that exists and there is a window. Returns whether anything changed.
     @discardableResult
     public func repair() -> Bool {
         var changed = false
@@ -338,7 +410,17 @@ public final class AppState: Codable {
                 space.pinned += strays
                 changed = true
             }
-            for item in space.today where item.pinnedURL != nil {
+            // A split holds two tabs of its own. One holding anything else gives way to the tabs in it.
+            func splits(_ items: [SidebarItem]) -> [SidebarItem] {
+                items.flatMap { $0.isSplit ? [$0] : $0.isFolder ? splits($0.children) : [] }
+            }
+            for split in splits(space.today) + splits(space.pinned)
+            where split.children.count != 2 || !split.children.allSatisfy(\.isTab) {
+                split.children = split.allTabs
+                if split.children.count != 2 { space.separate(split) }
+                changed = true
+            }
+            for item in space.today.flatMap(\.allTabs) where item.pinnedURL != nil {
                 item.pinnedURL = nil
                 changed = true
             }
@@ -364,9 +446,11 @@ public final class AppState: Codable {
     /// Puts a tab that is about to go on the reopen list, with its place when it's a pin. Folders and blank tabs
     /// aren't worth bringing back.
     public func remember(_ item: SidebarItem) {
-        guard !item.isFolder, !item.url.isEmpty, item.url != "about:blank", let owner = space(containing: item) else { return }
+        if item.isSplit { return item.children.forEach(remember) }
+        guard item.isTab, !item.url.isEmpty, item.url != "about:blank", let owner = space(containing: item) else { return }
         var closed = ClosedTab(url: item.url, title: item.title, customTitle: item.customTitle, spaceID: owner.id)
-        if let loc = owner.location(of: item), !loc.inToday {
+        // A split's tab comes back where its split was.
+        if let loc = owner.location(of: owner.row(of: item)), !loc.inToday {
             closed.pinnedURL = item.pinnedURL ?? item.url
             closed.folderID = loc.parent?.id
             closed.index = loc.index

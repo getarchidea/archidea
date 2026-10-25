@@ -32,7 +32,7 @@ extension BrowserWindowController {
         let item = SidebarItem(tab: tab.url, title: tab.title)
         let from = opener.flatMap { runtime.item(for: $0) }
         let owner = from.flatMap { state.space(containing: $0) } ?? space
-        let index = from.flatMap { source in owner.today.firstIndex { $0 === source } } ?? 0
+        let index = from.flatMap { source in owner.today.firstIndex { $0 === owner.row(of: source) } } ?? 0
         owner.today.insert(item, at: index)
         runtime.bind(tab, to: item)
         if owner === space { sidebar.reload() }
@@ -57,6 +57,8 @@ extension BrowserWindowController {
     func runtime(_ runtime: TabRuntime, tabDidClose item: SidebarItem) {
         guard let owner = state.space(containing: item) else { return }
         let wasActive = owner === space && item === activeItem
+        // A Today split's side closing leaves the other side in its place, and in front.
+        let otherSide = owner.isPinned(item) ? nil : owner.split(containing: item)?.children.first { $0 !== item }
         if owner.isPinned(item) {
             if let home = item.pinnedURL { item.url = home }
         } else {
@@ -65,16 +67,24 @@ extension BrowserWindowController {
         if wasActive {
             windowState.select(nil, in: owner)
             show(nil)
-            if let next = owner.today.first(where: { runtime.liveTab(for: $0) != nil }) { select(next, cause: "tab-closed-neighbor") }
+            if let next = otherSide ?? owner.today.first(where: { runtime.liveTab(for: $0) != nil }) {
+                select(next, cause: "tab-closed-neighbor")
+            }
         }
         // Another window waiting for the page shows nothing in its place.
         group.unload(item)
         reloadSidebar()
         store.setNeedsSave()
+        // It was the other side of the split in front: the side here has the page to itself.
+        if !wasActive, let tab = shownTab { show(tab) }
     }
 
     func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, didFindMatches count: Int32, active: Int32) {
         findBar.update(count: Int(count), active: Int(active))
+    }
+
+    func runtime(_ runtime: TabRuntime, tabGainedFocus tab: ArdiaCoreTab) {
+        if tab === pairedTab { focusPane(tab) }
     }
 
     func runtime(_ runtime: TabRuntime, tabNeedsActivation tab: ArdiaCoreTab) {

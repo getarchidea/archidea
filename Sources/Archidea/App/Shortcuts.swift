@@ -110,6 +110,8 @@ enum Shortcuts {
             item(L("menu.nextSpace"), #selector(AppDelegate.nextSpace), right, [.command, .option], reserve: true),
             item(L("menu.previousSpace"), #selector(AppDelegate.previousSpace), left, [.command, .option], reserve: true),
             .separator(),
+            item(L("menu.splitView"), #selector(AppDelegate.newSplit), "\\", [.command, .option], reserve: true),
+            .separator(),
         ]
         for number in 1...9 {
             tabs.append(item(L("menu.tabNumber", number), #selector(AppDelegate.selectTabByNumber(_:)), "\(number)", reserve: true, tag: number))

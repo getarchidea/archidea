@@ -36,6 +36,12 @@ protocol SidebarViewDelegate: AnyObject {
     func sidebarFavicon(for item: SidebarItem) -> NSImage?
     func sidebarIsLoaded(_ item: SidebarItem) -> Bool
     func sidebarIsLoading(_ item: SidebarItem) -> Bool
+    func sidebarCanSplit(_ item: SidebarItem) -> Bool
+    func sidebarSplit(_ item: SidebarItem)
+    func sidebarSeparate(_ split: SidebarItem)
+    func sidebarSwapSides(_ split: SidebarItem)
+    func sidebarDragBegan()
+    func sidebarDragEnded()
 }
 
 final class SidebarMarker {

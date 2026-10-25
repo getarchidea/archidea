@@ -324,6 +324,146 @@ final class SidebarCell: NSTableCellView {
     }
 }
 
+/// A split's row: its two tabs side by side, each with its icon and title, and a hairline between them. While the
+/// split is in front, the side with the keyboard reads in full and the other dimmer.
+final class SplitCell: NSTableCellView {
+    static let identifier = NSUserInterfaceItemIdentifier("SplitCell")
+
+    private let sides = [SplitSide(), SplitSide()]
+    private let closeButton = ChromeButton(symbol: "xmark", tip: L("split.close"), size: 10)
+    private var middle: CGFloat = 0
+    private var hovering = false {
+        didSet {
+            closeButton.isHidden = !hovering
+            needsLayout = true
+        }
+    }
+    var onClose: (() -> Void)?
+
+    init() {
+        super.init(frame: .zero)
+        identifier = Self.identifier
+        closeButton.isHidden = true
+        closeButton.target = self
+        closeButton.action = #selector(closeTapped)
+        sides.forEach(addSubview)
+        addSubview(closeButton)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// `focused`: the side with the keyboard, while the split is in front.
+    func configure(split: SidebarItem, icons: [NSImage?], loaded: [Bool], loading: [Bool], focused: Int?) {
+        for (index, side) in sides.enumerated() where split.children.indices.contains(index) {
+            side.configure(title: split.children[index].displayTitle, icon: icons[index], loaded: loaded[index],
+                           loading: loading[index], strong: focused == nil || focused == index)
+        }
+        toolTip = split.children.map(\.url).joined(separator: "\n")
+        refreshHover()
+    }
+
+    /// Which side (0 on the left, 1 on the right) a point in the cell is over.
+    func side(at point: NSPoint) -> Int { point.x < middle ? 0 : 1 }
+
+    /// As a pin's: an open pinned split shows a minus (it closes but keeps its place), anything else a cross.
+    func setCloseStyle(pinned: Bool, loaded: Bool) {
+        let unloads = pinned && loaded
+        closeButton.setSymbol(unloads ? "minus" : "xmark", size: 10)
+        closeButton.toolTip = unloads ? L("tab.unload.tip") : pinned ? L("tab.removePinned.tip") : L("split.close")
+    }
+
+    func refreshHover() {
+        let inside = isUnderPointer
+        if inside != hovering { hovering = inside }
+    }
+
+    /// Only the close button takes presses; the rest goes to the list, which tells the sides apart.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        if let hit, hit === closeButton || hit.isDescendant(of: closeButton) { return hit }
+        return nil
+    }
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height
+        let left: CGFloat = 20
+        closeButton.frame = NSRect(x: bounds.width - 40, y: (h - 22) / 2, width: 22, height: 22)
+        let right = closeButton.isHidden ? bounds.width - 18 : bounds.width - 44
+        let half = max(0, (right - left - 9) / 2)
+        sides[0].frame = NSRect(x: left, y: 0, width: half, height: h)
+        sides[1].frame = NSRect(x: left + half + 9, y: 0, width: half, height: h)
+        middle = left + half + 4.5
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.separatorColor.setFill()
+        NSRect(x: middle - 0.5, y: (bounds.height - 16) / 2, width: 1, height: 16).fill()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        refreshHover()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = isUnderPointer }
+    override func mouseMoved(with event: NSEvent) { if hovering != isUnderPointer { hovering.toggle() } }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    @objc private func closeTapped() { onClose?() }
+}
+
+/// One side of a split's row: the tab's icon (a spinner while it loads) and its title.
+private final class SplitSide: NSView {
+    private let icon = NSImageView()
+    private let title = NSTextField(labelWithString: "")
+    private let spinner = NSProgressIndicator()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.wantsLayer = true
+        icon.layer?.cornerRadius = 3
+        icon.layer?.masksToBounds = true
+        title.font = .systemFont(ofSize: 13)
+        title.lineBreakMode = .byTruncatingTail
+        title.cell?.isScrollable = false
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isDisplayedWhenStopped = false
+        for view in [icon, spinner, title] as [NSView] { addSubview(view) }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func configure(title text: String, icon image: NSImage?, loaded: Bool, loading: Bool, strong: Bool) {
+        icon.image = image ?? NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
+        icon.contentTintColor = image == nil ? .tertiaryLabelColor : nil
+        icon.alphaValue = loaded ? 1 : 0.6
+        title.stringValue = text
+        title.textColor = loaded && strong ? .labelColor : .secondaryLabelColor
+        if loading { spinner.startAnimation(nil); icon.isHidden = true } else { spinner.stopAnimation(nil); icon.isHidden = false }
+    }
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height
+        icon.frame = NSRect(x: 0, y: (h - 16) / 2, width: 16, height: 16)
+        spinner.frame = icon.frame
+        let textHeight = ceil(title.cell?.cellSize.height ?? 17)
+        title.frame = NSRect(x: 22, y: floor((h - textHeight) / 2), width: max(0, bounds.width - 22), height: textHeight)
+    }
+}
+
 final class DividerCell: NSTableCellView {
     var onClear: (() -> Void)?
 

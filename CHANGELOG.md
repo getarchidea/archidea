@@ -5,6 +5,11 @@ under *What's new*.
 
 ## [Unreleased]
 
+- **Split view**: two tabs side by side in one window, one row in the sidebar. Drag a tab from the sidebar onto the
+  left or right half of the page, choose *Open in Split View* from a tab's menu, or press ⌥⌘\ to open a new one
+  beside the page. The address bar, back and forward, ⌘W and Find act on the side you last clicked into. Drag the
+  divider to share the width, double-click it for halves. Closing one side leaves the other as a tab in its place;
+  the split's menu separates it or swaps its sides. Splits can be pinned and put in folders like tabs.
 - The two-finger swipe between spaces keeps up with the fingers and lands in one movement. The sidebar was laid out
   again on every step of the swipe, and the list came back for a moment before the next space slid in.
 

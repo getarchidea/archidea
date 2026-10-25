@@ -282,6 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         current?.window.performClose(sender)
     }
     @objc func togglePin(_ sender: Any?) { current?.togglePinSelected() }
+    @objc func newSplit(_ sender: Any?) { current?.splitWithNewTab() }
     @objc func newFolder(_ sender: Any?) { current?.newFolder() }
     @objc func toggleSidebar(_ sender: Any?) { current?.toggleSidebar() }
     @objc func reload(_ sender: Any?) { activePage?.reload() }

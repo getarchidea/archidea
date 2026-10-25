@@ -57,7 +57,7 @@ final class WindowGroup {
     /// `item` is going (closed, archived, its space deleted) or only its page is: the page closes in whichever window
     /// has it, and windows that had it in front show nothing in its place.
     func unload(_ item: SidebarItem) {
-        windows.forEach { $0.unloadOwn(item) }
+        for tab in item.allTabs { windows.forEach { $0.unloadOwn(tab) } }
     }
 
     /// `origin` stopped showing `item`: a window waiting for that page takes it.
@@ -98,7 +98,7 @@ final class WindowGroup {
         var archived = 0
         for owner in state.spaces {
             let stale = owner.staleToday(before: cutoff) { item in
-                state.isInFront(item, in: owner) || self.liveTab(for: item)?.audible == true
+                state.isInFront(item, in: owner) || item.allTabs.contains { self.liveTab(for: $0)?.audible == true }
             }
             for item in stale {
                 state.remember(item)

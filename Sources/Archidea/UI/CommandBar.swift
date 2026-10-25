@@ -45,6 +45,8 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     private var metrics: Metrics { anchor == nil ? .centered : .anchored }
 
     var isOpen: Bool { superview != nil }
+    /// What it opens goes beside the tab in front, as a split (⌥⌘\), rather than into a tab of its own.
+    var opensBeside = false
 
     init(controller: BrowserWindowController) {
         self.controller = controller
@@ -108,6 +110,7 @@ final class CommandBar: NSView, NSTextFieldDelegate {
 
     func show(in host: NSView, editing: Bool, current: String?, anchor: NSRect? = nil, over searchField: NSRect? = nil) {
         self.editing = editing
+        opensBeside = false
         self.anchor = anchor
         over = anchor == nil ? searchField : nil
         controller?.history.refresh { [weak self] in
@@ -274,12 +277,16 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     private func run(_ index: Int) {
         guard index >= 0, index < suggestions.count, let controller else { return }
         let suggestion = suggestions[index]
+        let beside = opensBeside, editing = self.editing
         hide()
+        let open = { (input: String) in
+            if editing { controller.navigate(input) } else if beside { controller.openBeside(input) } else { controller.openInNewTab(input) }
+        }
         switch suggestion {
-        case let .open(url): editing ? controller.navigate(url) : controller.openInNewTab(url)
-        case let .search(query): editing ? controller.navigate(query) : controller.openInNewTab(query)
+        case let .open(url): open(url)
+        case let .search(query): open(query)
         case let .tab(item, _): controller.select(item, cause: "command-bar")
-        case let .history(url, _): editing ? controller.navigate(url) : controller.openInNewTab(url)
+        case let .history(url, _): open(url)
         }
     }
 

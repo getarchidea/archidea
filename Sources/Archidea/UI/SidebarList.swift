@@ -116,23 +116,26 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         reflectSelection()
     }
 
+    /// A split's side is drawn by its split's row.
     func reloadItem(_ item: SidebarItem) {
-        guard item !== renaming, outline.row(forItem: item) >= 0 else { return }
-        outline.reloadItem(item, reloadChildren: false)
-        if let id = selectedID, id == item.id { reflectSelection() }
+        let row = space.row(of: item)
+        guard row !== renaming, outline.row(forItem: row) >= 0 else { return }
+        outline.reloadItem(row, reloadChildren: false)
+        if let id = selectedID, row.allTabs.contains(where: { $0.id == id }) { reflectSelection() }
     }
 
     /// The active tab is the window's (`WindowState`) and nothing else: the table's own selection is never used,
     /// so nothing AppKit does with rows (type-select, arrows, reloads, expanding) can switch tabs.
     func reflectSelection() {
-        let active = selectedID.flatMap { space.find($0) }
+        let active = selectedID.flatMap { space.find($0) }.map { space.row(of: $0) }
         outline.enumerateAvailableRowViews { rowView, row in
             (rowView as? SidebarRowView)?.isActive = active != nil && outline.item(atRow: row) as AnyObject === active
         }
     }
 
     /// Opens the folders around a tab the user just switched to and scrolls it into view.
-    func reveal(_ item: SidebarItem) {
+    func reveal(_ side: SidebarItem) {
+        let item = space.row(of: side)
         var parent = space.location(of: item)?.parent
         while let folder = parent {
             if !outline.isItemExpanded(folder) { outline.animator().expandItem(folder) }
@@ -230,6 +233,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             delegate?.sidebarNewTab()
         case let item as SidebarItem where item.isFolder:
             toggleFolder(item)
+        case let item as SidebarItem where item.isSplit:
+            delegate?.sidebarSelect(side(of: item, row: row), cause: "sidebar-click")
         case let item as SidebarItem:
             delegate?.sidebarSelect(item, cause: "sidebar-click")
         default:
@@ -241,16 +246,25 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let row = outline.clickedRow
         guard row >= 0, let item = outline.item(atRow: row) as? SidebarItem else { return }
         // The table reports the second click of a quick series here instead of as a click: a folder still toggles on it.
-        if item.isFolder { toggleFolder(item) } else { rename(item) }
+        if item.isFolder { toggleFolder(item) } else if item.isTab { rename(item) }
+    }
+
+    /// The side of a split's row the pointer is over; the split itself (its last side in front) when that can't tell.
+    private func side(of split: SidebarItem, row: Int) -> SidebarItem {
+        guard let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SplitCell,
+              let event = outline.window?.currentEvent else { return split }
+        let index = cell.side(at: cell.convert(event.locationInWindow, from: nil))
+        return split.children.indices.contains(index) ? split.children[index] : split
     }
 
     func toggleFolder(_ folder: SidebarItem) {
         if outline.isItemExpanded(folder) { outline.animator().collapseItem(folder) } else { outline.animator().expandItem(folder) }
     }
 
+    /// A middle click closes the tab under it: in a split, that side.
     private func middleClicked(_ row: Int) {
         guard let item = outline.item(atRow: row) as? SidebarItem, !item.isFolder else { return }
-        delegate?.sidebarClose(item)
+        delegate?.sidebarClose(item.isSplit ? side(of: item, row: row) : item)
     }
 
     @objc private func expansionChanged(_ note: Notification) {
@@ -269,7 +283,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
         guard let item = item as? SidebarItem else { return space.pinned.count + 2 + space.today.count }
-        return item.children.count
+        // A split's two tabs are drawn in its own row, not as rows under it.
+        return item.isFolder ? item.children.count : 0
     }
 
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
@@ -294,7 +309,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
         let row = SidebarRowView()
         row.hoverable = !((item as? SidebarMarker)?.kind == .divider)
-        row.isActive = (item as? SidebarItem).map { $0.id == selectedID } ?? false
+        row.isActive = (item as? SidebarItem).map { item in item.allTabs.contains { $0.id == selectedID } || item.id == selectedID } ?? false
         return row
     }
 
@@ -311,6 +326,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             return divider
         }
         guard let item = item as? SidebarItem else { return nil }
+        if item.isSplit { return splitCell(item, in: outlineView) }
         let cell = (outlineView.makeView(withIdentifier: SidebarCell.identifier, owner: nil) as? SidebarCell) ?? SidebarCell()
         let pinned = space.isPinned(item)
         let loaded = delegate?.sidebarIsLoaded(item) ?? false
@@ -322,6 +338,21 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                        tint: NSColor(hex: space.colorHex))
         cell.setCloseStyle(pinned: pinned, loaded: loaded)
         cell.onClose = { [weak self] in self?.delegate?.sidebarClose(item) }
+        return cell
+    }
+
+    private func splitCell(_ split: SidebarItem, in outlineView: NSOutlineView) -> NSView {
+        let cell = (outlineView.makeView(withIdentifier: SplitCell.identifier, owner: nil) as? SplitCell) ?? SplitCell()
+        let sides = split.children
+        let pinned = space.isPinned(split)
+        let loaded = sides.map { delegate?.sidebarIsLoaded($0) ?? false }
+        cell.configure(split: split,
+                       icons: sides.map { delegate?.sidebarFavicon(for: $0) },
+                       loaded: loaded.map { !pinned || $0 },
+                       loading: sides.map { delegate?.sidebarIsLoading($0) ?? false },
+                       focused: sides.firstIndex { $0.id == selectedID })
+        cell.setCloseStyle(pinned: pinned, loaded: loaded.contains(true))
+        cell.onClose = { [weak self] in self?.delegate?.sidebarClose(split) }
         return cell
     }
 
@@ -367,6 +398,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint,
                      forItems draggedItems: [Any]) {
+        // A tab can also be let go over the page, to open beside it.
+        delegate?.sidebarDragBegan()
         guard let folder = draggedItems.first as? SidebarItem, folder.isFolder, outlineView.isItemExpanded(folder) else { return }
         foldedForDrag = folder
         outlineView.collapseItem(folder)
@@ -374,6 +407,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint,
                      operation: NSDragOperation) {
+        delegate?.sidebarDragEnded()
         guard let folder = foldedForDrag else { return }
         foldedForDrag = nil
         if outlineView.row(forItem: folder) >= 0 { outlineView.expandItem(folder) }
@@ -408,6 +442,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
             return
         }
+        if item.isSplit { return splitMenu(item, into: menu) }
         if item.isFolder {
             menu.addItem(ClosureMenuItem(L("item.rename")) { [weak self] in DispatchQueue.main.async { self?.rename(item) } })
             menu.addItem(ClosureMenuItem(L("folder.icon")) { [weak self] in self?.pickIcon(for: item) })
@@ -432,18 +467,10 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(item.url, forType: .string)
         })
-        let others = store.state.spaces.filter { $0 !== space }
-        if !others.isEmpty {
-            let move = NSMenuItem(title: L("tab.moveToSpace"), action: nil, keyEquivalent: "")
-            let sub = NSMenu()
-            for target in others {
-                let entry = ClosureMenuItem(target.name) { [weak self] in self?.delegate?.sidebarMove(item, to: target) }
-                entry.image = Glyphs.image(target.symbol, filled: false, pointSize: 13)
-                sub.addItem(entry)
-            }
-            move.submenu = sub
-            menu.addItem(move)
+        if delegate?.sidebarCanSplit(item) == true {
+            menu.addItem(ClosureMenuItem(L("split.open")) { [weak self] in self?.delegate?.sidebarSplit(item) })
         }
+        addMoveToSpace(item, to: menu)
         menu.addItem(.separator())
         if pinned {
             if delegate?.sidebarIsLoaded(item) ?? false {
@@ -461,6 +488,39 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
 /// spaces over the space bar. The list opts out (`SidebarOutline` too) and its scroll events reach the window.
 final class SidebarScroll: ThinScrollView {
     override class var isCompatibleWithResponsiveScrolling: Bool { false }
+}
+
+extension SidebarList {
+    /// A split's menu: separate it, swap its sides, pin it, move it, close it.
+    fileprivate func splitMenu(_ split: SidebarItem, into menu: NSMenu) {
+        menu.addItem(ClosureMenuItem(L("split.separate")) { [weak self] in self?.delegate?.sidebarSeparate(split) })
+        menu.addItem(ClosureMenuItem(L("split.swap")) { [weak self] in self?.delegate?.sidebarSwapSides(split) })
+        menu.addItem(.separator())
+        let pinned = space.isPinned(split)
+        menu.addItem(ClosureMenuItem(pinned ? L("tab.unpin") : L("tab.pin")) { [weak self] in self?.delegate?.sidebarTogglePin(split) })
+        addMoveToSpace(split, to: menu)
+        menu.addItem(.separator())
+        if pinned, split.children.contains(where: { delegate?.sidebarIsLoaded($0) ?? false }) {
+            menu.addItem(ClosureMenuItem(L("tab.unload")) { [weak self] in self?.delegate?.sidebarClose(split) })
+        }
+        menu.addItem(ClosureMenuItem(pinned ? L("tab.removePinned") : L("split.close")) { [weak self] in
+            if pinned { self?.delegate?.sidebarRemove(split) } else { self?.delegate?.sidebarClose(split) }
+        })
+    }
+
+    fileprivate func addMoveToSpace(_ item: SidebarItem, to menu: NSMenu) {
+        let others = store.state.spaces.filter { $0 !== space }
+        guard !others.isEmpty else { return }
+        let move = NSMenuItem(title: L("tab.moveToSpace"), action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for target in others {
+            let entry = ClosureMenuItem(target.name) { [weak self] in self?.delegate?.sidebarMove(item, to: target) }
+            entry.image = Glyphs.image(target.symbol, filled: false, pointSize: 13)
+            sub.addItem(entry)
+        }
+        move.submenu = sub
+        menu.addItem(move)
+    }
 }
 
 #if DRIFT_DEV
