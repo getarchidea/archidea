@@ -85,8 +85,8 @@ final class WindowGroup {
     }
 
     /// A row changed (its title, its icon, its page loading): every other window that lists it redraws it.
-    func itemChanged(_ item: SidebarItem, by origin: BrowserWindowController) {
-        for window in windows where window !== origin { window.sidebar.reloadItem(item) }
+    func itemChanged(_ item: SidebarItem, by origin: BrowserWindowController, folders: Bool = false) {
+        for window in windows where window !== origin { window.sidebar.reloadItem(item, folders: folders) }
     }
 
     // MARK: archiving

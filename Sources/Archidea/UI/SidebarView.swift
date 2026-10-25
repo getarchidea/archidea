@@ -9,6 +9,11 @@ struct NavigationEntry {
     let offset: Int
 }
 
+/// Whether a tab is making sound, or has been made quiet; for a folder or a split, whether any of its tabs is.
+enum TabSound {
+    case silent, playing, muted
+}
+
 protocol SidebarViewDelegate: AnyObject {
     func sidebarSelect(_ item: SidebarItem, cause: String)
     func sidebarDownloads(from view: NSView)
@@ -48,6 +53,9 @@ protocol SidebarViewDelegate: AnyObject {
     func sidebarFavicon(for item: SidebarItem) -> NSImage?
     func sidebarIsLoaded(_ item: SidebarItem) -> Bool
     func sidebarIsLoading(_ item: SidebarItem) -> Bool
+    func sidebarSound(_ item: SidebarItem) -> TabSound
+    /// Quiets the tab (or a folder's or split's tabs) playing sound, or lets a quieted one play again.
+    func sidebarToggleSound(_ item: SidebarItem)
     func sidebarCanSplit(_ item: SidebarItem) -> Bool
     func sidebarSplit(_ item: SidebarItem)
     func sidebarSeparate(_ split: SidebarItem)
@@ -321,7 +329,7 @@ final class SidebarView: NSView, WindowDragSurface {
         rebuildSpaces()
     }
 
-    func reloadItem(_ item: SidebarItem) { list.reloadItem(item) }
+    func reloadItem(_ item: SidebarItem, folders: Bool = false) { list.reloadItem(item, folders: folders) }
     func reflectSelection() { list.reflectSelection() }
     func reveal(_ item: SidebarItem) { list.reveal(item) }
     func rename(_ item: SidebarItem, selectAll: Bool = false) { list.rename(item, selectAll: selectAll) }

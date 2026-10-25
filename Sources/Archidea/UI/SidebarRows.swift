@@ -183,6 +183,8 @@ final class SidebarCell: NSTableCellView, HoverTracking {
     private let unreadDot = NSView()
     /// How many of a live folder's tabs are new.
     private let count = NSTextField(labelWithString: "")
+    /// While the tab makes sound (or was quieted): a click quiets it, or lets it play again.
+    private let soundButton = SoundButton()
     private var closable = false
     private var hovering = false {
         didSet {
@@ -191,6 +193,7 @@ final class SidebarCell: NSTableCellView, HoverTracking {
         }
     }
     var onClose: (() -> Void)?
+    var onSound: (() -> Void)?
 
     init() {
         super.init(frame: .zero)
@@ -218,15 +221,16 @@ final class SidebarCell: NSTableCellView, HoverTracking {
         count.textColor = .controlAccentColor
         count.alignment = .right
         count.isHidden = true
+        soundButton.onClick = { [weak self] in self?.onSound?() }
         imageView = icon
         textField = title
-        [icon, spinner, unreadDot, title, count, closeButton].forEach(addSubview)
+        [icon, spinner, unreadDot, title, count, soundButton, closeButton].forEach(addSubview)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(item: SidebarItem, icon image: NSImage?, loaded: Bool, loading: Bool, closable: Bool, tint: NSColor? = nil,
-                   unread: Bool = false, count newCount: Int = 0) {
+                   unread: Bool = false, count newCount: Int = 0, sound: TabSound = .silent) {
         if item.isFolder {
             icon.image = Self.folderImage(item.icon, open: item.expanded)
             icon.contentTintColor = .secondaryLabelColor
@@ -251,6 +255,8 @@ final class SidebarCell: NSTableCellView, HoverTracking {
         }
         count.stringValue = newCount > 0 ? "\(newCount)" : ""
         count.isHidden = newCount == 0
+        soundButton.tabSound = sound
+        needsLayout = true
         if loading && !item.isFolder { spinner.startAnimation(nil); icon.isHidden = true } else { spinner.stopAnimation(nil); icon.isHidden = false }
         self.closable = closable
         refreshHover()
@@ -270,7 +276,7 @@ final class SidebarCell: NSTableCellView, HoverTracking {
     /// into a window that isn't key (just after switching apps) would only focus the window.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        if let hit, hit === closeButton || hit.isDescendant(of: closeButton) { return hit }
+        if let hit, hit.isDescendant(of: closeButton) || hit.isDescendant(of: soundButton) { return hit }
         if title.isEditable, let hit, hit === title || hit.isDescendant(of: title) { return hit }
         return nil
     }
@@ -294,7 +300,11 @@ final class SidebarCell: NSTableCellView, HoverTracking {
         closeButton.frame = NSRect(x: bounds.width - 40, y: (h - 22) / 2, width: 22, height: 22)
         unreadDot.frame = NSRect(x: 8, y: (h - 6) / 2, width: 6, height: 6)
         count.frame = NSRect(x: bounds.width - 18 - 32, y: (h - 15) / 2, width: 32, height: 15)
-        let right = !closeButton.isHidden ? bounds.width - 44 : !count.isHidden ? count.frame.minX - 4 : bounds.width - 18
+        var right = !closeButton.isHidden ? bounds.width - 44 : !count.isHidden ? count.frame.minX - 4 : bounds.width - 18
+        if !soundButton.isHidden {
+            soundButton.frame = NSRect(x: right - 20, y: (h - 20) / 2, width: 20, height: 20)
+            right = soundButton.frame.minX - 2
+        }
         let textHeight = ceil(title.cell?.cellSize.height ?? 17)
         title.frame = NSRect(x: left + 26, y: floor((h - textHeight) / 2), width: max(0, right - left - 26), height: textHeight)
     }
@@ -371,6 +381,8 @@ final class SplitCell: NSTableCellView, HoverTracking {
     }
     /// A side's close button was pressed: its place, left to right.
     var onClose: ((Int) -> Void)?
+    /// A side's sound button was pressed.
+    var onSound: ((Int) -> Void)?
 
     init() {
         super.init(frame: .zero)
@@ -381,18 +393,21 @@ final class SplitCell: NSTableCellView, HoverTracking {
 
     /// `focused`: the tab with the keyboard, while the split is in front. `closeTip` says what a side's close button
     /// does: in Today it closes the tab, among the pins it takes it out.
-    func configure(split: SidebarItem, icons: [NSImage?], loaded: [Bool], loading: [Bool], focused: Int?, closeTip: String) {
+    func configure(split: SidebarItem, icons: [NSImage?], loaded: [Bool], loading: [Bool], focused: Int?, closeTip: String,
+                   sounds: [TabSound]) {
         while sides.count < split.children.count {
             let index = sides.count
             let side = SplitSide()
             side.onClose = { [weak self] in self?.onClose?(index) }
+            side.onSound = { [weak self] in self?.onSound?(index) }
             addSubview(side)
             sides.append(side)
         }
         while sides.count > split.children.count { sides.removeLast().removeFromSuperview() }
         for (index, side) in sides.enumerated() {
             side.configure(title: split.children[index].displayTitle, icon: icons[index], loaded: loaded[index],
-                           loading: loading[index], strong: focused == nil || focused == index, closeTip: closeTip)
+                           loading: loading[index], strong: focused == nil || focused == index, closeTip: closeTip,
+                           sound: sounds.indices.contains(index) ? sounds[index] : .silent)
             side.showsClose = index == hovered
         }
         toolTip = split.children.map(\.url).joined(separator: "\n")
@@ -418,7 +433,7 @@ final class SplitCell: NSTableCellView, HoverTracking {
     /// Only the close buttons take presses; the rest goes to the list, which tells the sides apart.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        if let hit, sides.contains(where: { hit.isDescendant(of: $0.closeButton) }) { return hit }
+        if let hit, sides.contains(where: { hit.isDescendant(of: $0.closeButton) || hit.isDescendant(of: $0.soundButton) }) { return hit }
         return nil
     }
 
@@ -460,7 +475,9 @@ final class SplitCell: NSTableCellView, HoverTracking {
 /// pointer is on it. Too narrow for a title (three or four tabs in a narrow sidebar), it shows the icon alone.
 private final class SplitSide: NSView {
     let closeButton = ChromeButton(symbol: "xmark", tip: L("tab.close"), size: 10)
+    let soundButton = SoundButton()
     var onClose: (() -> Void)?
+    var onSound: (() -> Void)?
     var showsClose = false {
         didSet {
             guard showsClose != oldValue else { return }
@@ -488,19 +505,23 @@ private final class SplitSide: NSView {
         closeButton.isHidden = true
         closeButton.target = self
         closeButton.action = #selector(closeTapped)
-        for view in [icon, spinner, title, closeButton] as [NSView] { addSubview(view) }
+        soundButton.onClick = { [weak self] in self?.onSound?() }
+        for view in [icon, spinner, title, soundButton, closeButton] as [NSView] { addSubview(view) }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    /// Only the close button takes presses.
+    /// Only the close and sound buttons take presses.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        if let hit, hit.isDescendant(of: closeButton) { return hit }
+        if let hit, hit.isDescendant(of: closeButton) || hit.isDescendant(of: soundButton) { return hit }
         return nil
     }
 
-    func configure(title text: String, icon image: NSImage?, loaded: Bool, loading: Bool, strong: Bool, closeTip: String) {
+    func configure(title text: String, icon image: NSImage?, loaded: Bool, loading: Bool, strong: Bool, closeTip: String,
+                   sound: TabSound) {
+        soundButton.tabSound = sound
+        needsLayout = true
         icon.image = image ?? NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
         icon.contentTintColor = image == nil ? .tertiaryLabelColor : nil
         icon.alphaValue = loaded ? 1 : 0.6
@@ -517,12 +538,43 @@ private final class SplitSide: NSView {
         spinner.frame = icon.frame
         closeButton.frame = NSRect(x: bounds.width - 20, y: (h - 20) / 2, width: 20, height: 20)
         title.isHidden = bounds.width < 64
-        let end = showsClose ? closeButton.frame.minX - 2 : bounds.width
+        var end = showsClose ? closeButton.frame.minX - 2 : bounds.width
+        if !soundButton.isHidden {
+            soundButton.frame = NSRect(x: max(18, end - 18), y: (h - 18) / 2, width: 18, height: 18)
+            end = soundButton.frame.minX - 2
+        }
         let textHeight = ceil(title.cell?.cellSize.height ?? 17)
         title.frame = NSRect(x: 22, y: floor((h - textHeight) / 2), width: max(0, end - 22), height: textHeight)
     }
 
     @objc private func closeTapped() { onClose?() }
+}
+
+/// A tab's sound: a speaker while it plays, crossed out while it's quieted; nothing otherwise. Clicked, it quiets
+/// the tab or lets it play again.
+final class SoundButton: ChromeButton {
+    var onClick: (() -> Void)?
+
+    var tabSound = TabSound.silent {
+        didSet {
+            isHidden = tabSound == .silent
+            guard tabSound != oldValue, tabSound != .silent else { return }
+            setSymbol(tabSound == .muted ? "speaker.slash.fill" : "speaker.wave.2.fill", size: 10)
+            contentTintColor = tabSound == .muted ? .tertiaryLabelColor : .secondaryLabelColor
+            toolTip = tabSound == .muted ? L("tab.unmute") : L("tab.mute")
+        }
+    }
+
+    init() {
+        super.init(symbol: "speaker.wave.2.fill", tip: L("tab.mute"), size: 10)
+        isHidden = true
+        target = self
+        action = #selector(clicked)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func clicked() { onClick?() }
 }
 
 final class DividerCell: NSTableCellView {
