@@ -1,4 +1,5 @@
 import AppKit
+import ArchideaCore
 
 /// One page of a split, on a card of its own: rounded and edged like the single page, which it clips to its corners,
 /// with the window showing between the cards.
