@@ -28,7 +28,7 @@ extension BrowserWindowController {
         }
     }
 
-    func sidebarGo(by offset: Int) { activeTab?.goToOffset(Int32(offset)) }
+    func sidebarGo(by offset: Int) { activeTab?.go(toOffset: Int32(offset)) }
     func sidebarOpenInBackground(_ entry: NavigationEntry) { openInBackground(entry.url, title: entry.title) }
     func sidebarShowHistory() { openInNewTab("chrome://history") }
     func sidebarToggle() { toggleSidebar() }
