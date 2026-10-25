@@ -39,6 +39,9 @@
 "menu.actualSize" = "Исходный размер";
 "menu.app" = "Archidea";
 "menu.back" = "Назад";
+"menu.savePage" = "Сохранить страницу как…";
+"menu.print" = "Напечатать…";
+"menu.printSystem" = "Напечатать через системный диалог…";
 "menu.closeTab" = "Закрыть вкладку";
 "menu.closeWindow" = "Закрыть окно";
 "menu.copy" = "Копировать";

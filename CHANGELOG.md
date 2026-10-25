@@ -18,6 +18,8 @@ under *What's new*.
 - **A calmer start page**: the space you're in, a search field and the few keys worth knowing, on a soft wash of the
   space's colour. The most visited sites and recently closed tabs are gone from it: they're in History and on ⇧⌘T,
   and favourites are pinned in the sidebar.
+- ⌘P prints the page, with a preview and *Save as PDF*; ⌥⌘P goes straight to the system's print dialog, and ⇧⌘S saves
+  the page. The File menu has all three. There was no way to print before.
 
 ## [0.3.0] - 2026-10-25
 
