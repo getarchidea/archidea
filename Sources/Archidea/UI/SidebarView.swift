@@ -73,6 +73,8 @@ final class SidebarView: NSView, WindowDragSurface {
     private var scroll: ThinScrollView { list.scroll }
 
     private let card = CardBackground()
+    /// Holds the header and the list, and clips them to the sidebar while they slide to another space.
+    private let slideClip = SlideClip()
     private let cardTint = CardTint()
     private let toggleButton = ChromeButton(symbol: "sidebar.left", tip: L("sidebar.toggle.tip"))
     private let backButton = ChromeButton(symbol: "arrow.left", tip: L("sidebar.back.tip"))
@@ -158,13 +160,14 @@ final class SidebarView: NSView, WindowDragSurface {
             guard let self else { return }
             spaceMenu(for: space, anchor: header).popUp(positioning: nil, at: NSPoint(x: 0, y: header.bounds.height + 2), in: header)
         }
-        addSubview(header)
+        addSubview(slideClip)
+        slideClip.addSubview(header)
 
         list.emptyAreaMenu = { [weak self] in
             guard let self else { return NSMenu() }
             return spaceMenu(for: space, anchor: header, withTabItems: true)
         }
-        addSubview(scroll)
+        slideClip.addSubview(scroll)
 
         spaceStack.orientation = .horizontal
         spaceStack.spacing = 2
@@ -185,6 +188,9 @@ final class SidebarView: NSView, WindowDragSurface {
         let width = bounds.width, height = bounds.height
         card.frame = bounds
         cardTint.frame = card.bounds
+        // As big as the sidebar, so what's inside has the sidebar's own coordinates.
+        slideClip.frame = bounds
+        slideClip.layer?.cornerRadius = floating ? 10 : 0
         layer?.shadowPath = floating ? CGPath(roundedRect: bounds, cornerWidth: 10, cornerHeight: 10, transform: nil) : nil
 
         // The traffic lights stay where the window puts them; the toolbar lines up with them.
@@ -403,6 +409,25 @@ final class SidebarView: NSView, WindowDragSurface {
 // MARK: - the floating card
 
 private final class CardBackground: NSVisualEffectView, WindowDragSurface {}
+
+/// See `slideClip`. It never takes a press itself: one on empty space goes on to the sidebar, which drags the window.
+private final class SlideClip: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        layer?.cornerCurve = .continuous
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
+    }
+}
 private final class CardTint: NSView, WindowDragSurface {}
 
 #if DRIFT_DEV

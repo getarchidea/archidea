@@ -5,6 +5,10 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Switching spaces, the sidebar's list and header no longer slide out over the page: they stay inside the sidebar.
+- Folders open and close faster (about a sixth of a second), starting at once and easing to a stop, instead of
+  starting slowly.
+
 ## [0.3.0] - 2026-10-25
 
 - **Split view**: up to four tabs side by side in one window, one row in the sidebar. Drag a tab from the sidebar
