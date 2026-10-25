@@ -943,6 +943,31 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         store.setNeedsSave()
     }
 
+    /// A folder goes with everything in it: its tabs close, and ⇧⌘T brings them back. One holding tabs asks first.
+    func deleteFolder(_ folder: SidebarItem) {
+        let own = folder.allTabs.count
+        guard own > 0 else { return deleteFolderNow(folder) }
+        confirm(host: folder.title, icon: Glyphs.image(folder.icon ?? "folder", filled: true, pointSize: 15),
+                title: L("folder.delete.title", folder.title), detail: L("folder.delete.detail", plural("count.tabs", own)),
+                confirm: L("folder.delete.confirm")) { [weak self] in self?.deleteFolderNow(folder) }
+    }
+
+    private func deleteFolderNow(_ folder: SidebarItem) {
+        guard let owner = state.space(containing: folder) else { return }
+        let tabs = folder.allTabs
+        let wasActive = tabs.contains { $0 === activeItem }
+        // Remembered while they still have their place, to come back among the pins.
+        tabs.forEach(state.remember)
+        unloadTab(folder)
+        owner.remove(folder)
+        if wasActive {
+            windowState.select(nil, in: owner)
+            show(nil)
+        }
+        reloadSidebar()
+        store.setNeedsSave()
+    }
+
     /// Where the window goes when the tab in front closes: the next open tab below it, else the one above. A pin
     /// goes to an open Today tab, else another open pin, rather than to an empty window.
     private func neighbor(of item: SidebarItem) -> SidebarItem? {

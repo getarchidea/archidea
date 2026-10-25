@@ -30,6 +30,9 @@
 "extensions.unnamed" = "расширение";
 "find.placeholder" = "Найти на странице";
 "folder.delete" = "Удалить папку";
+"folder.delete.title" = "Удалить «%@»?";
+"folder.delete.detail" = "Вместе с ней закроются %@ — их можно вернуть через ⇧⌘T.";
+"folder.delete.confirm" = "Удалить";
 "folder.icon" = "Изменить иконку…";
 "folder.new" = "Новая папка";
 "item.rename" = "Переименовать";

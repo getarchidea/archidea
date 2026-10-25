@@ -30,6 +30,9 @@
 "extensions.unnamed" = "extension";
 "find.placeholder" = "Find on page";
 "folder.delete" = "Delete Folder";
+"folder.delete.title" = "Delete “%@”?";
+"folder.delete.detail" = "Its %@ close with it; ⇧⌘T brings them back.";
+"folder.delete.confirm" = "Delete";
 "folder.icon" = "Change Icon…";
 "folder.new" = "New Folder";
 "item.rename" = "Rename";

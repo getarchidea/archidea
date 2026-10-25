@@ -48,14 +48,7 @@ extension BrowserWindowController {
         store.setNeedsSave()
     }
 
-    func sidebarDeleteFolder(_ folder: SidebarItem) {
-        guard let loc = space.location(of: folder) else { return }
-        space.remove(folder)
-        if let parent = loc.parent { parent.children.insert(contentsOf: folder.children, at: loc.index) }
-        else { space.pinned.insert(contentsOf: folder.children, at: loc.index) }
-        reloadSidebar()
-        store.setNeedsSave()
-    }
+    func sidebarDeleteFolder(_ folder: SidebarItem) { deleteFolder(folder) }
 
     func sidebarFavicon(for item: SidebarItem) -> NSImage? {
         if let image = group.liveTab(for: item)?.favicon { return image }

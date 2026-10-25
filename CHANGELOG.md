@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Deleting a folder deletes what's in it, instead of leaving its tabs where it was. One that holds tabs asks first,
+  and ⇧⌘T brings them back.
+
 - Switching spaces, the sidebar's list and header no longer slide out over the page: they stay inside the sidebar.
 - Folders open and close faster (about a sixth of a second), starting at once and easing to a stop, instead of
   starting slowly.
