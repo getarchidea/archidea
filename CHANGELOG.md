@@ -5,6 +5,10 @@ under *What's new*.
 
 ## [Unreleased]
 
+- A tab you've had in front for a while is no longer unloaded the minute you switch away from it: its half hour (or
+  whatever Settings says) behind other tabs starts when it leaves the front, not when you picked it. And a page on
+  screen that the engine unloaded while the window was covered (short of memory) loads again when you come back.
+
 ## [0.4.1] - 2026-10-25
 
 - A tab playing sound shows a speaker in the sidebar, and so does a folder or split holding one; click it to mute

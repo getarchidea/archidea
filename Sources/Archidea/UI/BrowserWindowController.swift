@@ -189,6 +189,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         observe(NSWindow.didBecomeKeyNotification, object: window) { [weak self] _ in
             guard let self else { return }
             group.noteFront(self)
+            // A page on screen that went while the window was covered loads again.
+            reloadDiscardedFront()
             // The app's light or dark look (and with it the pages') is the space in front's, in whichever window.
             applyTheme(of: space)
             // A page this window waits for may be free by now.
@@ -501,6 +503,16 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         elsewherePage.isHidden = false
     }
 
+    /// The pages on screen that the engine unloaded (short of memory, with the window covered) load again: in a window
+    /// in front now, or once it comes to the front.
+    func reloadDiscardedFront() {
+        guard window.isVisible, !window.isMiniaturized else { return }
+        for page in [shownTab].compactMap({ $0 }) + otherPanes where page.discarded {
+            Trace.log("reloading \(runtime.item(for: page)?.traceName ?? "a page") the engine unloaded while it was on screen")
+            page.reload()
+        }
+    }
+
     /// The page's title on the window, so the Dock's window list and Mission Control tell windows apart.
     func updateWindowTitle() {
         let title = shownTab?.title ?? ""
@@ -551,6 +563,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         elsewherePage.isHidden = true
         let others = tab.map { panesBeside($0) } ?? []
         for old in [shownTab].compactMap({ $0 }) + otherPanes where old !== tab && !others.contains(where: { $0 === old }) {
+            // Its time behind other tabs (idle unloading, archiving, Clear) counts from now, not from when it was picked.
+            runtime.item(for: old)?.lastActive = Date()
             old.view.isHidden = true
             old.devToolsView?.isHidden = true
             old.noteShown(byHost: false)

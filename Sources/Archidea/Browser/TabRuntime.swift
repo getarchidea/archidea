@@ -18,6 +18,8 @@ protocol TabRuntimeDelegate: AnyObject {
     func runtime(_ runtime: TabRuntime, didUpdate item: SidebarItem, change: TabChange)
     func runtime(_ runtime: TabRuntime, adopt tab: ArdiaCoreTab, opener: ArdiaCoreTab?, foreground: Bool)
     func runtime(_ runtime: TabRuntime, tabDidClose item: SidebarItem)
+    /// A page on screen was unloaded (the engine's doing, short of memory): it loads again once it can be seen.
+    func runtime(_ runtime: TabRuntime, shownTabWasDiscarded tab: ArdiaCoreTab)
     func runtime(_ runtime: TabRuntime, downloadTookOver item: SidebarItem)
     func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, asksToOpenApp request: [String: Any])
     func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, didFindMatches count: Int32, active: Int32)
@@ -43,6 +45,8 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
     private var items: [ObjectIdentifier: SidebarItem] = [:]
     private var creating = false
     private var sleepTimer: Timer?
+    /// Tabs this runtime is putting to sleep, to tell its own discards from the engine's.
+    private var discarding: Set<ObjectIdentifier> = []
 
     init(coreWindow: ArdiaCoreWindow, profile: ArdiaCoreProfile) {
         self.coreWindow = coreWindow
@@ -119,12 +123,18 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
 
     var liveCount: Int { tabs.count }
 
+    /// Background tabs nobody has looked at for `unloadMinutes` give their memory back. `lastActive` is when a tab was
+    /// last in front (the window stamps it when the tab leaves the front, not only when it's picked), so a tab read
+    /// for an hour isn't put to sleep the minute it goes behind another.
     private func discardIdleTabs() {
         guard unloadMinutes > 0 else { return }
         let cutoff = Date().addingTimeInterval(-Double(unloadMinutes) * 60)
         for (_, tab) in tabs where !tab.closed && !tab.discarded && !tab.audible {
             guard let item = item(for: tab), item.lastActive < cutoff, tab.view.isHidden else { continue }
-            tab.discard()
+            discarding.insert(ObjectIdentifier(tab))
+            let minutes = Int(Date().timeIntervalSince(item.lastActive) / 60)
+            Trace.log("unloading \(item.traceName): behind other tabs for \(minutes) min")
+            if !tab.discard() { discarding.remove(ObjectIdentifier(tab)) }
         }
     }
 
@@ -161,7 +171,15 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
     @objc(tabDidChangeProgress:) func tabDidChangeProgress(_ tab: ArdiaCoreTab) { delegate?.runtime(self, loadingOf: tab) }
     @objc(tabDidChangeNavigationState:) func tabDidChangeNavigationState(_ tab: ArdiaCoreTab) { changed(tab) }
     @objc(tabDidChangeAudio:) func tabDidChangeAudio(_ tab: ArdiaCoreTab) { changed(tab, [.shown, .sound]) }
-    @objc(tabDidChangeDiscarded:) func tabDidChangeDiscarded(_ tab: ArdiaCoreTab) { changed(tab) }
+    @objc(tabDidChangeDiscarded:) func tabDidChangeDiscarded(_ tab: ArdiaCoreTab) {
+        let ours = discarding.remove(ObjectIdentifier(tab)) != nil
+        if tab.discarded, !ours {
+            // Chrome's own: it lets tabs go when memory runs short, even the one on screen in a window that's covered.
+            Trace.log("the engine unloaded \(item(for: tab)?.traceName ?? "a tab"), \(tab.view.isHidden ? "behind" : "on screen")")
+        }
+        changed(tab)
+        if tab.discarded, !tab.view.isHidden { delegate?.runtime(self, shownTabWasDiscarded: tab) }
+    }
 
     // MARK: blocked requests
 
