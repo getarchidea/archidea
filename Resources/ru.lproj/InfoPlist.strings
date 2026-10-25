@@ -1,2 +1,4 @@
 "CFBundleName" = "Archidea";
 "CFBundleDisplayName" = "Archidea";
+"NSLocationUsageDescription" = "Сайты могут запрашивать вашу геопозицию.";
+"NSLocationWhenInUseUsageDescription" = "Сайты могут запрашивать вашу геопозицию.";

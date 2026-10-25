@@ -90,6 +90,8 @@
 	<string>Websites may ask to use your microphone.</string>
 	<key>NSLocationUsageDescription</key>
 	<string>Websites may ask for your location.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Websites may ask for your location.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Signing in with a passkey from your phone uses Bluetooth.</string>
 	<key>NSHighResolutionCapable</key>

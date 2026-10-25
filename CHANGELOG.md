@@ -14,6 +14,8 @@ under *What's new*.
   Splits can be pinned and put in folders like tabs.
 - The two-finger swipe between spaces keeps up with the fingers and lands in one movement. The sidebar was laid out
   again on every step of the swipe, and the list came back for a moment before the next space slid in.
+- Sites get your location. The first time you let one have it, Archidea asks macOS for it; when macOS has location
+  off for Archidea, a card says so and opens the setting. Before, macOS was never asked and the site waited in vain.
 
 ## [0.2.0] - 2026-10-24
 
