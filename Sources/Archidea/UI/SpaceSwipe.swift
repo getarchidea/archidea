@@ -57,7 +57,7 @@ final class SpaceSwipe {
             offset += event.scrollingDeltaX
             velocity = event.scrollingDeltaX
             let width = sidebar.bounds.width
-            sidebar.swipeOffset = neighbour(offset) != nil ? max(-width, min(width, offset)) : offset / 3
+            sidebar.followSwipe(neighbour(offset) != nil ? max(-width, min(width, offset)) : offset / 3)
             return true
         case .ended, .cancelled:
             scrolling = false
@@ -69,10 +69,12 @@ final class SpaceSwipe {
             if event.phase == .ended, let next = neighbour(offset), abs(offset) > width * 0.25 || flick {
                 Trace.log("swipe: on to the next space (\(Int(abs(offset))) of \(Int(width)) pt\(flick ? ", flicked" : ""))")
                 let outward: CGFloat = offset > 0 ? width : -width
-                sidebar.settleSwipe(at: outward, duration: 0.16) { [weak self] in
+                sidebar.settleSwipe(at: outward, duration: 0.14) { [weak self] in
                     guard let self else { return }
-                    sidebar.swipeOffset = 0
+                    // The space changes while its list is out of view, and the next one comes in from the other side:
+                    // one movement, not the list coming back and sliding away again.
                     arrive(next)
+                    sidebar.swipeIn(from: -outward * 0.4, duration: 0.24)
                 }
             } else {
                 Trace.log("swipe: back (\(Int(abs(offset))) of \(Int(width)) pt, \(neighbour(offset) == nil ? "no space that way" : "not far enough"))")

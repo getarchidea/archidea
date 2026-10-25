@@ -37,7 +37,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     private(set) lazy var findBar = FindBar(controller: self)
     private lazy var spaceSwipe = SpaceSwipe(sidebar: sidebar, hasSeveralSpaces: { [weak self] in (self?.state.spaces.count ?? 0) > 1 },
                                              neighbour: { [weak self] offset in self?.neighbourSpace(towards: offset) },
-                                             arrive: { [weak self] target in self?.switchSpace(to: target) })
+                                             arrive: { [weak self] target in self?.switchSpace(to: target, slide: false) })
 
     private(set) var shownTab: ArdiaCoreTab?
     var contentFullscreen = false
@@ -856,13 +856,14 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     // MARK: spaces
 
-    func switchSpace(to target: Space) {
+    /// `slide` pushes the list in from the side the space sits on; a swipe moves the list itself.
+    func switchSpace(to target: Space, slide: Bool = true) {
         expectActivation(of: nil)
         guard target !== space else { return }
         let from = state.spaces.firstIndex { $0 === space } ?? 0
         let to = state.spaces.firstIndex { $0 === target } ?? 0
         windowState.spaceID = target.id
-        applySpace(direction: to > from ? 1 : -1)
+        applySpace(direction: slide ? (to > from ? 1 : -1) : 0)
         store.setNeedsSave()
     }
 
