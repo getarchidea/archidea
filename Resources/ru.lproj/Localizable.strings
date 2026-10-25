@@ -405,6 +405,11 @@
 "elsewhere.title" = "Открыта в другом окне";
 "elsewhere.show" = "Показать окно";
 "elsewhere.move" = "Перенести сюда";
+"split.open" = "Открыть в сплите";
+"split.separate" = "Разделить вкладки";
+"split.swap" = "Поменять местами";
+"split.close" = "Закрыть сплит";
+"menu.splitView" = "Новый сплит";
 "start.hide" = "Убрать со стартовой страницы";
 "update.downloading" = "Скачивается Archidea %@";
 "update.downloading.detail" = "Как только загрузится, внизу сайдбара появится кнопка перезапуска.";

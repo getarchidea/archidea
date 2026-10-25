@@ -405,6 +405,11 @@
 "elsewhere.title" = "Open in another window";
 "elsewhere.show" = "Show Window";
 "elsewhere.move" = "Move Here";
+"split.open" = "Open in Split View";
+"split.separate" = "Separate Tabs";
+"split.swap" = "Swap Sides";
+"split.close" = "Close Split View";
+"menu.splitView" = "New Split View";
 "start.hide" = "Remove from Start Page";
 "update.downloading" = "Downloading Archidea %@";
 "update.downloading.detail" = "It’s on its way; a Restart button shows in the sidebar once it’s ready.";

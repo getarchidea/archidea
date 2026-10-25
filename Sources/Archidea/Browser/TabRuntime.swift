@@ -20,6 +20,7 @@ protocol TabRuntimeDelegate: AnyObject {
     func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, asksToOpenApp request: [String: Any])
     func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, didFindMatches count: Int32, active: Int32)
     func runtime(_ runtime: TabRuntime, tabNeedsActivation tab: ArdiaCoreTab)
+    func runtime(_ runtime: TabRuntime, tabGainedFocus tab: ArdiaCoreTab)
     func runtime(_ runtime: TabRuntime, loadingOf tab: ArdiaCoreTab)
 }
 
@@ -204,6 +205,11 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
     @objc(tab:didFindMatches:active:final:)
     func tab(_ tab: ArdiaCoreTab, didFindMatches count: Int32, active: Int32, final: Bool) {
         delegate?.runtime(self, tab: tab, didFindMatches: count, active: active)
+    }
+
+    /// The page took the keyboard (a press into it, Tab from a field): in a split, its side is the one in front.
+    @objc(tabDidGainFocus:) func tabDidGainFocus(_ tab: ArdiaCoreTab) {
+        delegate?.runtime(self, tabGainedFocus: tab)
     }
 
     @objc(tab:requestsActivation:)
