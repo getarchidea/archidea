@@ -363,6 +363,7 @@ final class SplitCell: NSTableCellView {
         for (index, side) in sides.enumerated() {
             side.configure(title: split.children[index].displayTitle, icon: icons[index], loaded: loaded[index],
                            loading: loading[index], strong: focused == nil || focused == index, closeTip: closeTip)
+            side.showsClose = index == hovered
         }
         toolTip = split.children.map(\.url).joined(separator: "\n")
         needsLayout = true
