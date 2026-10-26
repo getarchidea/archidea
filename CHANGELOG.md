@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Dragging a tab no longer pushes the whole list down to make room for Favorites. With no favorites yet, the
+  spot to drop one shows over the space's name only when a tab is dragged there.
+
 ## [0.5.0] - 2026-10-26
 
 - Favorites: tabs as tiles above the space's name, the same in every space, as in Arc. Drag a tab up there (while

@@ -4,7 +4,8 @@ import ArchideaCore
 /// The favourites, the same in every space: tabs as tiles above the pins, three to a row, every row as wide as the
 /// sidebar (four make a row of three and a row of one as wide as the three). A tile shows the site's icon, lit while
 /// it's the tab in front. A click opens it, a drag moves it among the tiles or out to the list, and a tab dragged here
-/// from the list becomes one. While a tab is dragged in the sidebar the grid shows even when empty, to take it.
+/// from the list becomes one. With no favourites yet the grid takes no room; while a tab is dragged it lies over the
+/// space's name, unseen, and shows where to drop only once the tab is over it.
 final class FavoritesGrid: NSView {
     static let columns = 3
     static let tileHeight: CGFloat = 44
@@ -13,15 +14,23 @@ final class FavoritesGrid: NSView {
     weak var delegate: SidebarViewDelegate?
     /// The grid's height changed (tiles came or went, a drag began or ended): the sidebar lays out again.
     var onResize: (() -> Void)?
+    /// A tab dragged over the empty grid: what it lies over (the space's name) steps aside for the drop spot.
+    var onDropSpot: ((Bool) -> Void)?
 
     private var space: Space?
     private var selectedID: UUID?
     private var tiles: [FavoriteTile] = []
     private let placeholder = FavoritesPlaceholder()
     /// Where a tab dragged over the grid would go: before the tile at this index (the count: after the last).
-    private var dropIndex: Int? { didSet { if dropIndex != oldValue { needsLayout = true } } }
+    private var dropIndex: Int? {
+        didSet {
+            guard dropIndex != oldValue else { return }
+            needsLayout = true
+            if tiles.isEmpty, (dropIndex == nil) != (oldValue == nil) { onDropSpot?(dropIndex != nil) }
+        }
+    }
 
-    /// A row of the list is being dragged: an empty grid shows where to drop it.
+    /// A row of the list is being dragged: an empty grid lies ready over the space's name.
     var dragging = false {
         didSet {
             guard dragging != oldValue else { return }
@@ -87,9 +96,9 @@ final class FavoritesGrid: NSView {
         stride(from: 0, to: count, by: columns).map { $0..<min($0 + columns, count) }
     }
 
-    /// As tall as its rows; nothing while there are no favourites and nothing to drop.
+    /// As tall as its rows; nothing while there are no favourites (a drag doesn't make room: the list stays put).
     var contentHeight: CGFloat {
-        let rows = CGFloat(Self.rows(max(tiles.count, dragging ? 1 : 0)).count)
+        let rows = CGFloat(Self.rows(tiles.count).count)
         return rows == 0 ? 0 : rows * Self.tileHeight + (rows - 1) * Self.gap
     }
 
@@ -107,8 +116,8 @@ final class FavoritesGrid: NSView {
     override func layout() {
         super.layout()
         for (tile, frame) in zip(tiles, frames(in: bounds.width)) { tile.frame = frame }
-        placeholder.isHidden = !(dragging && tiles.isEmpty)
-        placeholder.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.tileHeight)
+        placeholder.isHidden = !(dragging && tiles.isEmpty && dropIndex != nil)
+        placeholder.frame = tiles.isEmpty ? bounds : NSRect(x: 0, y: 0, width: bounds.width, height: Self.tileHeight)
         placeholder.highlighted = dropIndex != nil
         for (index, tile) in tiles.enumerated() {
             tile.markedBefore = dropIndex == index

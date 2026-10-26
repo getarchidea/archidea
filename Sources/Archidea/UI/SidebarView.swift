@@ -214,6 +214,7 @@ final class SidebarView: NSView, WindowDragSurface {
         addSubview(slideClip)
         slideClip.addSubview(header)
         favorites.onResize = { [weak self] in self?.favoritesResized() }
+        favorites.onDropSpot = { [weak self] shown in self?.header.alphaValue = shown ? 0 : 1 }
         slideClip.addSubview(favorites)
         list.onDrag = { [weak self] dragging in self?.favorites.dragging = dragging }
         list.onMove = { [weak self] in
@@ -265,7 +266,8 @@ final class SidebarView: NSView, WindowDragSurface {
         address.frame = NSRect(x: 12, y: top, width: width - 24, height: 38)
         // The favourites belong to no space: above the space's name, which goes with its list.
         let grid = favorites.contentHeight
-        favorites.frame = NSRect(x: 12, y: top + 48, width: width - 24, height: grid)
+        // No favourites: none of the room, but while a tab is dragged the grid lies over the space's name to take it.
+        favorites.frame = NSRect(x: 12, y: top + 48, width: width - 24, height: grid > 0 ? grid : favorites.dragging ? 28 : 0)
         let headerTop = top + 48 + (grid > 0 ? grid + 8 : 0)
         header.frame = NSRect(x: 12, y: headerTop, width: width - 24, height: 28)
         let listTop = headerTop + 32
