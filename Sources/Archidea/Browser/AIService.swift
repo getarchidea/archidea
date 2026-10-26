@@ -1,9 +1,9 @@
 import Foundation
 import ArchideaCore
 
-/// The AI service the person connected in Settings: its key, and the requests the features send to it. The key is
-/// kept in a file only this user can read, in the browser's data folder, never in the sidebar's state; without one,
-/// a browser started from a terminal uses that shell's ANTHROPIC_API_KEY or OPENAI_API_KEY.
+/// The AI service the person connected in Settings: its key, and the requests the features send to it. Each service's
+/// key is kept in a file only this user can read, in the browser's data folder, never in the sidebar's state; without
+/// one, a browser started from a terminal uses that shell's (ANTHROPIC_API_KEY, OPENAI_API_KEY and so on).
 final class AIService {
     static let shared = AIService()
 
@@ -20,7 +20,9 @@ final class AIService {
     var key: String {
         let stored = storedKey
         if !stored.isEmpty { return stored }
-        return ProcessInfo.processInfo.environment[settings.provider.environmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let name = settings.provider.environmentKey
+        guard !name.isEmpty else { return "" }
+        return ProcessInfo.processInfo.environment[name]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     /// Whether the key comes from the environment rather than Settings.
@@ -35,20 +37,43 @@ final class AIService {
         FileManager.default.createFile(atPath: keyFile.path, contents: Data(trimmed.utf8), attributes: [.posixPermissions: 0o600])
     }
 
-    /// Connected: a key, or a service of one's own that needs none (a local Ollama), and a model to ask.
+    /// Connected: a key (a server on this Mac, or one's own, needs none) and a model to ask.
     var isConnected: Bool {
-        guard !settings.resolvedModel.isEmpty else { return false }
-        return !key.isEmpty || (settings.provider == .openAI && !settings.baseURL.trimmingCharacters(in: .whitespaces).isEmpty)
+        guard !settings.resolvedModel.isEmpty, !settings.resolvedBaseURL.isEmpty else { return false }
+        return !key.isEmpty || settings.provider.isLocal || settings.provider == .custom
+    }
+
+    /// The service's models, by provider and address, once asked for.
+    private var modelLists: [String: [String]] = [:]
+
+    func cachedModels() -> [String]? { modelLists[settings.provider.rawValue + settings.resolvedBaseURL] }
+
+    /// The models the service offers (needs the key, except on this Mac).
+    func models() async throws -> [String] {
+        let cacheKey = settings.provider.rawValue + settings.resolvedBaseURL
+        if let list = modelLists[cacheKey] { return list }
+        let request = try AIWire.modelsRequest(settings: settings, key: key)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch let error as URLError {
+            throw AIError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw AIWire.error(status: status, body: data) }
+        let list = AIWire.models(from: data)
+        modelLists[cacheKey] = list
+        return list
     }
 
     private func urlRequest(_ request: AIRequest, stream: Bool) throws -> URLRequest {
-        guard isConnected else { throw key.isEmpty ? AIError.noKey : AIError.noModel }
+        guard isConnected else { throw settings.resolvedModel.isEmpty ? AIError.noModel : AIError.noKey }
         return try AIWire.urlRequest(request, settings: settings, key: key, stream: stream)
     }
 
     /// The whole answer at once (the background features, which want JSON).
     func complete(_ request: AIRequest) async throws -> String {
-        let provider = settings.provider
+        let api = settings.provider.api
         let urlRequest = try urlRequest(request, stream: false)
         let (data, response): (Data, URLResponse)
         do {
@@ -58,12 +83,12 @@ final class AIService {
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw AIWire.error(status: status, body: data) }
-        return try AIWire.text(from: data, provider: provider)
+        return try AIWire.text(from: data, api: api)
     }
 
     /// The answer as it's written (Ask AI). Ends with an `AIError` when it can't be had.
     func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
-        let provider = settings.provider
+        let api = settings.provider.api
         let built = Result { try urlRequest(request, stream: true) }
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -79,7 +104,7 @@ final class AIService {
                     for try await line in bytes.lines {
                         guard line.hasPrefix("data:") else { continue }
                         let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
-                        switch AIWire.event(fromLine: payload, provider: provider) {
+                        switch AIWire.event(fromLine: payload, api: api) {
                         case let .text(text)?: continuation.yield(text)
                         case .done?: continuation.finish()
                             return

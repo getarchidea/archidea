@@ -5,14 +5,16 @@ under *What's new*.
 
 ## [Unreleased]
 
-- AI, with your own key (Settings → AI): Anthropic, or any service with an OpenAI-compatible API (OpenAI, OpenRouter,
-  a local Ollama). Nothing AI shows until it's connected, private windows never use it, and every feature can be
-  turned off. The default model is the cheapest that does the job; only tab titles and sites are sent, never pages.
-  - *Ask AI* in the address bar: type a question after ⌘T and press Tab, the answer is written right there. When the
-    service can't answer (no credit, a wrong key, no connection) it says so plainly and offers the search instead.
-  - Short tab names: long page titles get a short one in the sidebar. A name you give a tab still wins.
-  - *Tidy* next to Today's *Clear*: the AI groups Today's tabs by topic, and once you confirm each group becomes a
-    folder among the pinned tabs.
+- AI, with your own key (Settings → AI). Pick a service and it comes filled in, its address and a cheap model:
+  Anthropic (Claude), OpenAI (ChatGPT), Google (Gemini), OpenRouter, Groq (Llama), Mistral, DeepSeek, or Ollama and
+  LM Studio running on your Mac. The model can be picked from the service's own list. Nothing AI shows until it's
+  connected, private windows never use it, and every feature can be turned off. Only what you ask for is sent.
+  - *Ask AI* in the address bar: type a question after ⌘T and press Tab. The answer is written right there, and you
+    can ask follow-ups in the same field. When the service can't answer (no credit, a wrong key, no connection) it
+    says so plainly, with the search a click away.
+  - *Rename with AI* in a tab's menu: a short name made of the page's title.
+  - *Tidy* next to Today's *Clear*: Today's tabs glow while the AI sorts them, then they're in folders by topic among
+    the pinned tabs.
 - *Search … for “…”* in a page's menu uses the search engine you picked in Settings. It always searched
   DuckDuckGo, the engine's own default.
 - Clicking into the address while editing it places the caret there. A click on the address bar opened over the

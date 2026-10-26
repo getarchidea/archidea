@@ -26,13 +26,6 @@ public final class SidebarItem: Codable {
     public var entryID: String?
     /// Kept only while set, so the file doesn't carry it for every tab.
     private var unreadMark: Bool?
-    /// A short name the AI made of the page's title (`SmartTitles`), and the title it was made of: once the page has
-    /// another title, it waits for a new one.
-    public var shortTitle: String?
-    public var shortTitleOf: String?
-
-    /// Whether tabs show their short names (Settings → AI, while connected).
-    public static var showsShortTitles = false
 
     /// The most tabs a split holds.
     public static let splitLimit = 4
@@ -70,7 +63,6 @@ public final class SidebarItem: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, title, url, pinnedURL, children, expanded, lastActive, icon, customTitle, splitWidths, feed, entryID
-        case shortTitle, shortTitleOf
         case unreadMark = "unread"
     }
 
@@ -99,8 +91,6 @@ public final class SidebarItem: Codable {
         feed = try? c.decodeIfPresent(LiveFeed.self, forKey: .feed)
         entryID = try? c.decodeIfPresent(String.self, forKey: .entryID)
         unreadMark = try? c.decodeIfPresent(Bool.self, forKey: .unreadMark)
-        shortTitle = try? c.decodeIfPresent(String.self, forKey: .shortTitle)
-        shortTitleOf = try? c.decodeIfPresent(String.self, forKey: .shortTitleOf)
     }
 
     /// A tab a live folder brought in that hasn't been opened yet.
@@ -120,7 +110,6 @@ public final class SidebarItem: Codable {
     public var displayTitle: String {
         if isSplit { return children.map(\.displayTitle).joined(separator: " · ") }
         if let customTitle, !customTitle.isEmpty { return customTitle }
-        if Self.showsShortTitles, let shortTitle, !shortTitle.isEmpty, shortTitleOf == title { return shortTitle }
         if !title.isEmpty { return title }
         if let host = URL(string: url)?.host { return host }
         return url.isEmpty ? "New Tab" : url

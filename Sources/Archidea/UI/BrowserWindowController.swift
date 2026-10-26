@@ -422,7 +422,6 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         AddressPill.showsFullURL = settings.showFullURL
         runtime.unloadMinutes = settings.unloadMinutes
         AIService.shared.settings = settings.ai
-        SidebarItem.showsShortTitles = settings.ai.shortTitles && AIService.shared.isConnected
         if !isPrivate {
             BundledExtension.adBlocker.apply(settings.adBlock, to: profile)
             BundledExtension.cookieBanners.apply(settings.hideCookieBanners, to: profile)

@@ -17,8 +17,6 @@ final class WindowGroup {
     private var behind: Set<ObjectIdentifier> = []
     /// The live folders' feeds, read for the normal windows' sidebar; a private window's group never starts it.
     private(set) lazy var liveFolders = LiveFolders(group: self)
-    /// Short names for long tab titles (Settings → AI); a private window's group never asks.
-    private(set) lazy var smartTitles = SmartTitlesRunner(group: self)
 
     init(store: Store) {
         self.store = store

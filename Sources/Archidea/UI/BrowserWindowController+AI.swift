@@ -1,52 +1,71 @@
 import AppKit
 import ArchideaCore
 
-/// Tidy Today: the AI groups Today's tabs by topic, a card shows the groups, and on "Tidy" each becomes a folder
-/// among the pins (folders live there), its tabs in it.
+/// What the AI does from the sidebar, when asked: names a tab, and tidies Today into folders. While it works, the
+/// rows it works on glow; then the change simply happens. Only a failure says anything.
 extension BrowserWindowController {
-    /// Today holds enough tabs to group, and the AI is there to group them.
-    var tidiesToday: Bool {
-        usesAI && settings.ai.tidy && space.today.filter(\.isTab).count >= TidyToday.minimum
+    /// Spaces whose Today is being tidied and tabs being named, so a second click doesn't ask twice.
+    private enum Working {
+        static var items = Set<UUID>()
     }
 
+    var renamesWithAI: Bool { usesAI && settings.ai.rename }
+
+    /// Today holds enough tabs to group, and the AI is there to group them.
+    var tidiesToday: Bool {
+        usesAI && settings.ai.tidy && space.today.filter(\.isTab).count >= TidyToday.minimum && !Working.items.contains(space.id)
+    }
+
+    /// The tab gets a short name made of its page's title, as if the person had renamed it (Reset Name undoes it).
+    func renameWithAI(_ item: SidebarItem) {
+        guard renamesWithAI, item.isTab, Working.items.insert(item.id).inserted else { return }
+        let glow = sidebar.glow(over: [item])
+        Trace.log("rename with AI: \(item.traceName)")
+        Task { @MainActor [weak self] in
+            defer {
+                Working.items.remove(item.id)
+                glow?.stop()
+            }
+            do {
+                let answer = try await AIService.shared.complete(TabNaming.request(for: item))
+                guard let self, let name = TabNaming.parse(answer) else { throw AIError.unreadable }
+                item.customTitle = name
+                sidebar.reloadItem(item)
+                group.itemChanged(item, by: self)
+                store.setNeedsSave()
+            } catch {
+                self?.showAIError(error as? AIError ?? .failed(error.localizedDescription))
+            }
+        }
+    }
+
+    /// Groups Today's tabs by topic, each group a folder at the end of the pins (folders live there), its tabs in it.
     func tidyToday() {
         guard tidiesToday else { return }
         let target = space
         // Splits stay as they are; titles and sites are all that's sent.
         let tabs = target.today.filter(\.isTab)
-        let id = "tidy-\(target.id)"
-        let icon = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
-        var task: Task<Void, Never>?
-        sitePrompts.add(.init(id: id, tab: nil, belongsToTab: false, icon: icon, host: L("ai.name"), title: L("ai.tidy.working"),
-                              detail: plural("count.tabs", tabs.count),
-                              buttons: [.init(title: L("common.cancel"), style: .secondary) { _ in task?.cancel() }],
-                              dismissed: { task?.cancel() }))
+        Working.items.insert(target.id)
+        sidebar.reload()
+        let glow = sidebar.glow(over: tabs)
         Trace.log("tidy today: \(tabs.count) tabs")
-        task = Task { @MainActor [weak self] in
+        Task { @MainActor [weak self] in
+            defer {
+                Working.items.remove(target.id)
+                glow?.stop()
+            }
             do {
                 let answer = try await AIService.shared.complete(TidyToday.request(for: tabs))
-                guard let self, !Task.isCancelled else { return }
-                sitePrompts.remove(id: id)
-                let groups = TidyToday.parse(answer, tabs: tabs)
-                Trace.log("tidy today: \(groups.count) groups")
-                guard !groups.isEmpty else { return showNotice(L("ai.tidy.nothing"), detail: nil) }
-                let list = groups.map { "\($0.name) — \(plural("count.tabs", $0.tabs.count))" }.joined(separator: "\n")
-                sitePrompts.add(.init(id: id, tab: nil, belongsToTab: false, icon: icon, host: L("ai.name"),
-                                      title: L("ai.tidy.title"), detail: list + "\n\n" + L("ai.tidy.note"),
-                                      buttons: [.init(title: L("common.cancel"), style: .secondary) { _ in },
-                                                .init(title: L("ai.tidy.apply"), style: .primary) { [weak self] _ in
-                                                    self?.applyTidy(groups, in: target)
-                                                }],
-                                      dismissed: {}))
+                guard let self else { return }
+                applyTidy(TidyToday.parse(answer, tabs: tabs), in: target)
             } catch {
-                guard let self, !Task.isCancelled else { return }
-                sitePrompts.remove(id: id)
+                guard let self else { return }
+                sidebar.reload()
                 showAIError(error as? AIError ?? .failed(error.localizedDescription))
             }
         }
     }
 
-    /// Each group becomes a folder at the end of the pins, with the tabs that are still in Today.
     private func applyTidy(_ groups: [TidyToday.Group], in target: Space) {
         var made = 0
         for group in groups {
@@ -58,7 +77,8 @@ extension BrowserWindowController {
             made += 1
         }
         Trace.log("tidy today: \(made) folders made")
-        reloadSidebar()
+        sidebar.reload(fading: true)
+        group.sidebarChanged(by: self)
         store.setNeedsSave()
     }
 

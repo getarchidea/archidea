@@ -28,7 +28,6 @@ extension BrowserWindowController {
         let folders = change.contains(.sound)
         sidebar.reloadItem(item, folders: folders)
         group.itemChanged(item, by: self, folders: folders)
-        if change.contains(.saved), !isPrivate, SmartTitles.wants(item) { group.smartTitles.titlesChanged() }
         if item === activeItem {
             sidebar.updateAddress(runtime.liveTab(for: item))
             if change.contains(.saved) { updateWindowTitle() }

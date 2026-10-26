@@ -1,14 +1,28 @@
 import Foundation
 
-/// Who answers: Anthropic's API, or any service that speaks OpenAI's chat completions (OpenAI, OpenRouter, a local
-/// Ollama or LM Studio).
+/// Who answers. Each service comes filled in: its address, a cheap model that does the job (an alias that follows
+/// the service's newest where it has one) and where a terminal keeps its key; Settings can change the model and the
+/// address. All but Anthropic speak OpenAI's chat completions.
 public enum AIProvider: String, Codable, CaseIterable {
-    case anthropic, openAI
+    case anthropic, openAI, gemini, openRouter, groq, mistral, deepSeek, ollama, lmStudio, custom
+
+    /// The two ways of asking.
+    public enum API { case anthropic, openAI }
+
+    public var api: API { self == .anthropic ? .anthropic : .openAI }
 
     public var name: String {
         switch self {
-        case .anthropic: return "Anthropic"
-        case .openAI: return L("ai.provider.openai")
+        case .anthropic: return "Anthropic (Claude)"
+        case .openAI: return "OpenAI (ChatGPT)"
+        case .gemini: return "Google (Gemini)"
+        case .openRouter: return "OpenRouter"
+        case .groq: return "Groq (Llama)"
+        case .mistral: return "Mistral"
+        case .deepSeek: return "DeepSeek"
+        case .ollama: return L("ai.provider.ollama")
+        case .lmStudio: return L("ai.provider.lmStudio")
+        case .custom: return L("ai.provider.custom")
         }
     }
 
@@ -16,27 +30,66 @@ public enum AIProvider: String, Codable, CaseIterable {
         switch self {
         case .anthropic: return "https://api.anthropic.com"
         case .openAI: return "https://api.openai.com/v1"
+        case .gemini: return "https://generativelanguage.googleapis.com/v1beta/openai"
+        case .openRouter: return "https://openrouter.ai/api/v1"
+        case .groq: return "https://api.groq.com/openai/v1"
+        case .mistral: return "https://api.mistral.ai/v1"
+        case .deepSeek: return "https://api.deepseek.com/v1"
+        case .ollama: return "http://localhost:11434/v1"
+        case .lmStudio: return "http://localhost:1234/v1"
+        case .custom: return ""
         }
     }
 
-    /// The cheapest model that does the job well; services other than Anthropic name theirs in Settings.
+    /// Cheap and good enough for short answers and naming; the service's list of models is in Settings too.
     public var defaultModel: String {
         switch self {
         case .anthropic: return "claude-haiku-5-5"
-        case .openAI: return ""
+        case .openAI: return "gpt-5-nano"
+        case .gemini: return "gemini-flash-lite-latest"
+        case .openRouter: return "openai/gpt-5-nano"
+        case .groq: return "llama-3.1-8b-instant"
+        case .mistral: return "mistral-small-latest"
+        case .deepSeek: return "deepseek-chat"
+        case .ollama: return "llama3.2"
+        // Whatever is loaded: Settings fills it in from the server's list.
+        case .lmStudio, .custom: return ""
         }
     }
 
-    /// Where the key is looked for when none is entered: a browser started from a terminal sees that shell's.
+    /// Runs on this Mac: no key needed.
+    public var isLocal: Bool { self == .ollama || self == .lmStudio }
+
+    /// Where a terminal keeps the key, for a browser started from one when none is entered.
     public var environmentKey: String {
         switch self {
         case .anthropic: return "ANTHROPIC_API_KEY"
-        case .openAI: return "OPENAI_API_KEY"
+        case .openAI, .custom: return "OPENAI_API_KEY"
+        case .gemini: return "GEMINI_API_KEY"
+        case .openRouter: return "OPENROUTER_API_KEY"
+        case .groq: return "GROQ_API_KEY"
+        case .mistral: return "MISTRAL_API_KEY"
+        case .deepSeek: return "DEEPSEEK_API_KEY"
+        case .ollama, .lmStudio: return ""
+        }
+    }
+
+    /// Where to get a key.
+    public var keyPage: String? {
+        switch self {
+        case .anthropic: return "https://console.anthropic.com/settings/keys"
+        case .openAI: return "https://platform.openai.com/api-keys"
+        case .gemini: return "https://aistudio.google.com/apikey"
+        case .openRouter: return "https://openrouter.ai/keys"
+        case .groq: return "https://console.groq.com/keys"
+        case .mistral: return "https://console.mistral.ai/api-keys"
+        case .deepSeek: return "https://platform.deepseek.com/api_keys"
+        case .ollama, .lmStudio, .custom: return nil
         }
     }
 }
 
-/// The AI features, each of which can be off, and the service they use. Nothing runs without a key.
+/// The AI features, each of which can be off, and the service they use. Nothing runs until it's connected.
 public struct AISettings: Codable, Equatable {
     public var provider = AIProvider.anthropic
     /// Empty: the provider's own.
@@ -44,9 +97,9 @@ public struct AISettings: Codable, Equatable {
     public var model = ""
     /// "Ask AI" in the command bar (⌘T).
     public var ask = true
-    /// Short names for tabs whose pages have long titles.
-    public var shortTitles = true
-    /// "Tidy Today": Today's tabs into folders by topic.
+    /// "Rename with AI" in a tab's menu.
+    public var rename = true
+    /// "Tidy" next to Today's Clear: Today's tabs into folders by topic.
     public var tidy = true
 
     public init() {}
@@ -58,7 +111,7 @@ public struct AISettings: Codable, Equatable {
         baseURL = (try? c.decodeIfPresent(String.self, forKey: .baseURL)) ?? defaults.baseURL
         model = (try? c.decodeIfPresent(String.self, forKey: .model)) ?? defaults.model
         ask = (try? c.decodeIfPresent(Bool.self, forKey: .ask)) ?? defaults.ask
-        shortTitles = (try? c.decodeIfPresent(Bool.self, forKey: .shortTitles)) ?? defaults.shortTitles
+        rename = (try? c.decodeIfPresent(Bool.self, forKey: .rename)) ?? defaults.rename
         tidy = (try? c.decodeIfPresent(Bool.self, forKey: .tidy)) ?? defaults.tidy
     }
 
@@ -114,20 +167,28 @@ public enum AIError: Error, Equatable {
     }
 }
 
-/// One request: instructions, the text to work on, and how long the answer may be (a ceiling with room for the
-/// model's own brief thinking; only what's written is paid for). With a `schema`, the answer is a JSON object of
-/// that shape.
+/// One request: instructions, the conversation so far (questions and answers, oldest first) and the new text, and how
+/// long the answer may be (a ceiling with room for the model's own brief thinking; only what's written is paid for).
+/// With a `schema`, the answer is a JSON object of that shape.
 public struct AIRequest {
     public var system: String
+    public var history: [(question: String, answer: String)]
     public var prompt: String
     public var maxTokens: Int
     public var schema: [String: Any]?
 
-    public init(system: String, prompt: String, maxTokens: Int, schema: [String: Any]? = nil) {
+    public init(system: String, history: [(question: String, answer: String)] = [], prompt: String, maxTokens: Int,
+                schema: [String: Any]? = nil) {
         self.system = system
+        self.history = history
         self.prompt = prompt
         self.maxTokens = maxTokens
         self.schema = schema
+    }
+
+    var messages: [[String: String]] {
+        history.flatMap { [["role": "user", "content": $0.question], ["role": "assistant", "content": $0.answer]] }
+            + [["role": "user", "content": prompt]]
     }
 }
 
@@ -138,25 +199,34 @@ public enum AIStreamEvent: Equatable {
     case failed(AIError)
 }
 
-/// The two services' requests and replies, as bytes; the app sends them. Kept here so they can be tested.
+/// The two kinds of service's requests and replies, as bytes; the app sends them. Kept here so they can be tested.
 public enum AIWire {
     public static let anthropicVersion = "2026-10-21"
+
+    private static func base(_ settings: AISettings) throws -> String {
+        var base = settings.resolvedBaseURL
+        while base.hasSuffix("/") { base.removeLast() }
+        guard !base.isEmpty else { throw AIError.failed(L("ai.error.noAddress")) }
+        return base
+    }
+
+    private static func headers(_ settings: AISettings, key: String) -> [String: String] {
+        switch settings.provider.api {
+        case .anthropic: return ["x-api-key": key, "anthropic-version": anthropicVersion]
+        case .openAI: return key.isEmpty ? [:] : ["authorization": "Bearer \(key)"]
+        }
+    }
 
     public static func urlRequest(_ request: AIRequest, settings: AISettings, key: String, stream: Bool) throws -> URLRequest {
         let model = settings.resolvedModel
         guard !model.isEmpty else { throw AIError.noModel }
-        var base = settings.resolvedBaseURL
-        while base.hasSuffix("/") { base.removeLast() }
+        let base = try base(settings)
         var body: [String: Any]
         let path: String
-        var headers = ["content-type": "application/json"]
-        switch settings.provider {
+        switch settings.provider.api {
         case .anthropic:
             path = base.hasSuffix("/v1") ? "/messages" : "/v1/messages"
-            headers["x-api-key"] = key
-            headers["anthropic-version"] = anthropicVersion
-            body = ["model": model, "max_tokens": request.maxTokens, "system": request.system,
-                    "messages": [["role": "user", "content": request.prompt]]]
+            body = ["model": model, "max_tokens": request.maxTokens, "system": request.system, "messages": request.messages]
             var output: [String: Any] = [:]
             // As little thinking as the model allows: these are small, quick jobs, and every token is paid for.
             if supportsEffort(model) { output["effort"] = "low" }
@@ -164,24 +234,44 @@ public enum AIWire {
             if !output.isEmpty { body["output_config"] = output }
         case .openAI:
             path = "/chat/completions"
-            if !key.isEmpty { headers["authorization"] = "Bearer \(key)" }
             var system = request.system
             if let schema = request.schema, let data = try? JSONSerialization.data(withJSONObject: schema, options: [.sortedKeys]),
                let text = String(data: data, encoding: .utf8) {
                 // json_object is what every compatible service accepts; the shape goes in the instructions.
                 system += "\n\nReply with only a JSON object matching this JSON Schema:\n" + text
             }
-            body = ["model": model, "max_tokens": request.maxTokens,
-                    "messages": [["role": "system", "content": system], ["role": "user", "content": request.prompt]]]
+            body = ["model": model, "max_tokens": request.maxTokens, "messages": [["role": "system", "content": system]] + request.messages]
             if request.schema != nil { body["response_format"] = ["type": "json_object"] }
         }
         if stream { body["stream"] = true }
         guard let url = URL(string: base + path) else { throw AIError.failed(base) }
         var urlRequest = URLRequest(url: url, timeoutInterval: stream ? 120 : 45)
         urlRequest.httpMethod = "POST"
-        headers.forEach { urlRequest.setValue($0.value, forHTTPHeaderField: $0.key) }
+        urlRequest.setValue("application/json", forHTTPHeaderField: "content-type")
+        headers(settings, key: key).forEach { urlRequest.setValue($0.value, forHTTPHeaderField: $0.key) }
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         return urlRequest
+    }
+
+    /// The service's list of models, for Settings to offer.
+    public static func modelsRequest(settings: AISettings, key: String) throws -> URLRequest {
+        let base = try base(settings)
+        let path = settings.provider.api == .anthropic ? (base.hasSuffix("/v1") ? "/models?limit=100" : "/v1/models?limit=100") : "/models"
+        guard let url = URL(string: base + path) else { throw AIError.failed(base) }
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        headers(settings, key: key).forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+        return request
+    }
+
+    /// The models' names in a list reply (`data[].id`, which both kinds use; Gemini's own names lose "models/").
+    public static func models(from data: Data) -> [String] {
+        let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        let list = (json["data"] as? [[String: Any]]) ?? (json["models"] as? [[String: Any]]) ?? []
+        var seen = Set<String>()
+        return list.compactMap { ($0["id"] as? String) ?? ($0["name"] as? String) }
+            .map { $0.hasPrefix("models/") ? String($0.dropFirst(7)) : $0 }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .sorted()
     }
 
     /// Models that take `output_config.effort`; older ones reject it.
@@ -191,9 +281,9 @@ public enum AIWire {
     }
 
     /// The answer's text from a whole (not streamed) reply.
-    public static func text(from data: Data, provider: AIProvider) throws -> String {
+    public static func text(from data: Data, api: AIProvider.API) throws -> String {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw AIError.unreadable }
-        switch provider {
+        switch api {
         case .anthropic:
             if json["stop_reason"] as? String == "refusal" { throw AIError.refused }
             let blocks = json["content"] as? [[String: Any]] ?? []
@@ -208,10 +298,10 @@ public enum AIWire {
     }
 
     /// One `data:` line of a streamed reply (the part after "data: ").
-    public static func event(fromLine line: String, provider: AIProvider) -> AIStreamEvent? {
+    public static func event(fromLine line: String, api: AIProvider.API) -> AIStreamEvent? {
         if line == "[DONE]" { return .done }
         guard let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { return nil }
-        switch provider {
+        switch api {
         case .anthropic:
             switch json["type"] as? String {
             case "content_block_delta":
@@ -273,57 +363,33 @@ public enum AIWire {
 
 // MARK: - the features' prompts
 
-/// "Ask AI" from the command bar: a short, direct answer.
+/// "Ask AI" from the command bar: short, direct answers, and follow-up questions on them.
 public enum AskAI {
-    public static func request(_ question: String) -> AIRequest {
+    public static func request(_ question: String, after history: [(question: String, answer: String)] = []) -> AIRequest {
         AIRequest(system: """
             You answer questions typed into a web browser's address bar. Answer directly and briefly: a few sentences or a \
             short list, no preamble. Use the language of the question. Use simple Markdown (bold, lists, inline code) only \
             when it helps. If the question needs current information you may not have, say so in one sentence.
-            """, prompt: question, maxTokens: 4000)
+            """, history: history, prompt: question, maxTokens: 4000)
     }
 }
 
-/// Short names for tabs: "Inbox (3) - someone@example.com - Example Mail" becomes "Inbox". The page's title and host
-/// are all that's sent; the tabs are numbered so the answer is short.
-public enum SmartTitles {
-    /// A title this short is left as it is.
-    public static let shortEnough = 24
-    /// The most tabs named in one request.
-    public static let batch = 40
-
-    public static func wants(_ item: SidebarItem) -> Bool {
-        item.isTab && item.customTitle == nil && item.title.count > shortEnough && item.shortTitleOf != item.title
+/// "Rename with AI" from a tab's menu: a short name of the page's title and host, which are all that's sent.
+public enum TabNaming {
+    public static func request(for tab: SidebarItem) -> AIRequest {
+        AIRequest(system: """
+            You name a browser tab for a narrow sidebar. Given the page's site and title, reply with a name of 1 to 4 words, \
+            at most 28 characters, that says what the page is: keep the specific subject (the document, product, film, \
+            person, question or article), drop the site's name, counters, slogans and separators unless they are the \
+            subject. Keep the title's language. Never invent anything that isn't there. Reply with the name only.
+            """, prompt: "\(URL(string: tab.url)?.host ?? "")\n\(tab.title.isEmpty ? tab.url : tab.title)", maxTokens: 1024)
     }
 
-    public static func request(for tabs: [SidebarItem]) -> AIRequest {
-        let lines = tabs.enumerated().map { index, tab in
-            "\(index + 1)\t\(URL(string: tab.url)?.host ?? "")\t\(tab.title.replacingOccurrences(of: "\n", with: " "))"
-        }
-        return AIRequest(system: """
-            You shorten browser tab titles so they fit a narrow sidebar. For each tab (number, site, title) give a name of \
-            1 to 4 words, at most 28 characters, that says what the page is: keep the specific subject (the document, \
-            product, person, question or article), drop the site's name, counters, slogans and separators unless they are \
-            the subject. Keep the title's language. Never invent anything that isn't in the title.
-            """, prompt: lines.joined(separator: "\n"), maxTokens: 1024 + tabs.count * 24, schema: [
-            "type": "object", "additionalProperties": false, "required": ["titles"],
-            "properties": ["titles": ["type": "array", "items": [
-                "type": "object", "additionalProperties": false, "required": ["n", "title"],
-                "properties": ["n": ["type": "integer"], "title": ["type": "string"]],
-            ]]],
-        ])
-    }
-
-    /// Each tab's short name, by the tab, from the answer; names that are empty or no shorter are left out.
-    public static func parse(_ text: String, tabs: [SidebarItem]) -> [(SidebarItem, String)] {
-        let titles = AIWire.jsonObject(in: text)?["titles"] as? [[String: Any]] ?? []
-        return titles.compactMap { entry in
-            guard let n = (entry["n"] as? Int) ?? (entry["n"] as? String).flatMap(Int.init), tabs.indices.contains(n - 1),
-                  let title = (entry["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
-            let tab = tabs[n - 1]
-            guard title.count < tab.title.count else { return nil }
-            return (tab, String(title.prefix(40)))
-        }
+    /// The name in the answer: its first line, without quotes or a full stop.
+    public static func parse(_ text: String) -> String? {
+        let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let name = line.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "\"'«»“”.*`")))
+        return name.isEmpty ? nil : String(name.prefix(40))
     }
 }
 

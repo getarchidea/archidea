@@ -160,6 +160,16 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         reflectSelection()
     }
 
+    /// A glow over the rows of `items` (in the list, so it scrolls with them) while the AI works on them.
+    func glow(over items: [SidebarItem]) -> AIGlow? {
+        let rects = items.map { outline.row(forItem: space.row(of: $0)) }.filter { $0 >= 0 }.map { outline.rect(ofRow: $0) }
+        guard var area = rects.first else { return nil }
+        for rect in rects.dropFirst() { area = area.union(rect) }
+        let glow = AIGlow(frame: area.insetBy(dx: 8, dy: 0))
+        outline.addSubview(glow)
+        return glow
+    }
+
     /// The row's own label becomes editable, so the name stays exactly where it was drawn.
     /// Return or clicking away keeps it, Escape drops it.
     func rename(_ item: SidebarItem, selectAll: Bool = false) {
@@ -194,8 +204,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             if item.isFolder {
                 if !title.isEmpty { item.title = title }
             } else {
-                // Emptied, or left at the page's own title (or its short name): the tab follows the page again.
-                item.customTitle = title.isEmpty || title == item.title || title == item.shortTitle ? nil : title
+                // Emptied, or set back to the page's own title: the tab follows the page again.
+                item.customTitle = title.isEmpty || title == item.title ? nil : title
             }
         }
         if let label, outline.window?.firstResponder === label.currentEditor() { outline.window?.makeFirstResponder(nil) }
@@ -498,6 +508,11 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             menu.addItem(ClosureMenuItem(L("tab.resetPin")) { [weak self] in self?.delegate?.sidebarResetPin(item) })
         }
         menu.addItem(ClosureMenuItem(L("item.rename")) { [weak self] in DispatchQueue.main.async { self?.rename(item) } })
+        if delegate?.sidebarCanRenameWithAI() == true {
+            let ai = ClosureMenuItem(L("ai.rename.menu")) { [weak self] in self?.delegate?.sidebarRenameWithAI(item) }
+            ai.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
+            menu.addItem(ai)
+        }
         if item.customTitle != nil {
             menu.addItem(ClosureMenuItem(L("tab.resetName")) { [weak self] in
                 item.customTitle = nil

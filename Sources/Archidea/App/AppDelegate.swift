@@ -93,7 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The browser-wide settings changed: every window takes them up.
     func settingsChanged() {
         browserWindows.forEach { $0.settingsChanged() }
-        browser.smartTitles.settingsChanged()
     }
 
     /// The windows as they are, for the next launch: where each is, the one in front last.
@@ -131,7 +130,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         IncomingLinks.handler = { [weak self] url in self?.openIncoming(url) }
         // The live folders start reading their feeds.
         _ = browser.liveFolders
-        browser.smartTitles.settingsChanged()
         #if DRIFT_DEV
         let controller = windows[0]
         SelfTest.runIfRequested(controller)

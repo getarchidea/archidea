@@ -29,6 +29,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     private let heading = NSTextField(labelWithString: "")
     private let scroll = ThinScrollView()
     private var section = Section.general
+    /// Services whose model list was asked for in this window, so a failing one isn't asked again on every redraw.
+    private var modelListAsked = Set<String>()
 
     private var app: AppDelegate? { NSApp.delegate as? AppDelegate }
     private var browser: BrowserWindowController? { app?.windowController }
@@ -235,13 +237,15 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         return [SettingsCard(rows: rows), add]
     }
 
-    /// The AI: which service, the key, the model, a check that it answers, and each feature on or off. Nothing AI
-    /// shows anywhere else until it's connected.
+    /// The AI: which service (each comes filled in: its address and a cheap model), the key, the model from the
+    /// service's own list, a check that it answers, and each feature on or off. Nothing AI shows anywhere else until
+    /// it's connected.
     private func ai() -> [NSView] {
         let service = AIService.shared
         let current = settings.ai
+        let provider = current.provider
         let providers = AIProvider.allCases
-        let provider = popup(providers.map(\.name), selected: providers.firstIndex(of: current.provider) ?? 0) { [weak self] index in
+        let providerPopup = popup(providers.map(\.name), selected: providers.firstIndex(of: provider) ?? 0) { [weak self] index in
             self?.update {
                 $0.ai.provider = providers[index]
                 $0.ai.baseURL = ""
@@ -249,25 +253,51 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             }
             self?.render()
         }
-        let key = ClosureField(secure: true, value: service.storedKey,
-                               placeholder: service.keyFromEnvironment ? L("ai.key.fromEnvironment", current.provider.environmentKey)
-                                   : current.provider == .anthropic ? "sk-ant-…" : "sk-…") { [weak self] value in
-            guard value != service.storedKey else { return }
-            service.setKey(value)
-            self?.app?.settingsChanged()
+        var rows = [SettingsRow(title: L("ai.provider"), detail: L("ai.provider.detail"), control: providerPopup)]
+
+        if !provider.isLocal {
+            let key = ClosureField(secure: true, value: service.storedKey,
+                                   placeholder: service.keyFromEnvironment ? L("ai.key.fromEnvironment", provider.environmentKey) : "") { [weak self] value in
+                guard value != service.storedKey else { return }
+                service.setKey(value)
+                self?.app?.settingsChanged()
+                self?.render()
+            }
+            var keyControl: NSView = key
+            if let page = provider.keyPage {
+                let link = button(L("ai.key.page")) { NSWorkspace.shared.open(URL(string: page)!) }
+                let stack = NSStackView(views: [key, link])
+                stack.spacing = 8
+                keyControl = stack
+            }
+            rows.append(SettingsRow(title: L("ai.key"), detail: L("ai.key.detail"), control: keyControl))
+        }
+
+        // The model: the one filled in, or any from the service's list once it's loaded.
+        var models = service.cachedModels() ?? []
+        if !provider.defaultModel.isEmpty, !models.contains(provider.defaultModel) { models.insert(provider.defaultModel, at: 0) }
+        let model = ClosureCombo(value: current.resolvedModel, items: models) { [weak self] value in
+            let stored = value == provider.defaultModel ? "" : value
+            guard stored != current.model else { return }
+            self?.update { $0.ai.model = stored }
             self?.render()
         }
-        let model = ClosureField(secure: false, value: current.model,
-                                 placeholder: current.provider.defaultModel.isEmpty ? L("ai.model.required") : current.provider.defaultModel) { [weak self] value in
-            guard value != current.model else { return }
-            self?.update { $0.ai.model = value }
+        rows.append(SettingsRow(title: L("ai.model"), detail: L("ai.model.detail"), control: model))
+        if service.cachedModels() == nil, service.isConnected || provider.isLocal, modelListAsked.insert(provider.rawValue + current.resolvedBaseURL).inserted {
+            Task { @MainActor [weak self] in
+                guard (try? await service.models()) != nil else { return }
+                self?.render()
+            }
+        }
+
+        let address = ClosureField(secure: false, value: current.resolvedBaseURL, placeholder: "https://…") { [weak self] value in
+            let stored = value == provider.defaultBaseURL ? "" : value
+            guard stored != current.baseURL else { return }
+            self?.update { $0.ai.baseURL = stored }
             self?.render()
         }
-        let address = ClosureField(secure: false, value: current.baseURL, placeholder: current.provider.defaultBaseURL) { [weak self] value in
-            guard value != current.baseURL else { return }
-            self?.update { $0.ai.baseURL = value }
-            self?.render()
-        }
+        rows.append(SettingsRow(title: L("ai.address"), detail: L("ai.address.detail"), control: address))
+
         let status = NSTextField(wrappingLabelWithString: service.isConnected ? L("ai.status.ready") : L("ai.status.off"))
         status.font = .systemFont(ofSize: 11)
         status.textColor = .secondaryLabelColor
@@ -277,7 +307,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             statusLabel?.stringValue = L("ai.check.running")
             Task { @MainActor in
                 do {
-                    _ = try await service.complete(AIRequest(system: "Reply with the single word OK.", prompt: "Ping", maxTokens: 16))
+                    _ = try await service.complete(AIRequest(system: "Reply with the single word OK.", prompt: "Ping", maxTokens: 256))
                     statusLabel?.stringValue = L("ai.check.ok")
                 } catch {
                     statusLabel?.stringValue = (error as? AIError ?? .failed(error.localizedDescription)).message
@@ -287,18 +317,11 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         check.isEnabled = service.isConnected
         let checkRow = NSStackView(views: [status, check])
         checkRow.spacing = 10
-
-        let connection = SettingsCard(rows: [
-            SettingsRow(title: L("ai.provider"), detail: L("ai.provider.detail"), control: provider),
-            SettingsRow(title: L("ai.key"), detail: L("ai.key.detail"), control: key),
-            SettingsRow(title: L("ai.model"), detail: L("ai.model.detail"), control: model),
-            SettingsRow(title: L("ai.address"), detail: L("ai.address.detail"), control: address),
-            SettingsRow(title: L("ai.connection"), detail: nil, control: checkRow),
-        ])
+        rows.append(SettingsRow(title: L("ai.connection"), detail: nil, control: checkRow))
 
         let switches: [(String, String, Bool, (inout AISettings, Bool) -> Void)] = [
             ("ai.feature.ask", "ai.feature.ask.detail", current.ask, { $0.ask = $1 }),
-            ("ai.feature.titles", "ai.feature.titles.detail", current.shortTitles, { $0.shortTitles = $1 }),
+            ("ai.feature.rename", "ai.feature.rename.detail", current.rename, { $0.rename = $1 }),
             ("ai.feature.tidy", "ai.feature.tidy.detail", current.tidy, { $0.tidy = $1 }),
         ]
         let features = SettingsCard(rows: switches.map { title, detail, on, set in
@@ -310,7 +333,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
         note.preferredMaxLayoutWidth = 480
-        return [connection, features, note]
+        return [SettingsCard(rows: rows), features, note]
     }
 
     private func privacy() -> [NSView] {
@@ -674,7 +697,39 @@ private final class ClosureField: NSView, NSTextFieldDelegate {
     required init?(coder: NSCoder) { fatalError() }
 
     func controlTextDidEndEditing(_ obj: Notification) {
-        handler(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        let value = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        DispatchQueue.main.async { [handler] in handler(value) }
+    }
+}
+
+/// A name typed or picked from a list (a service's models), saved when one is picked, Return is pressed or the field
+/// is left.
+private final class ClosureCombo: NSComboBox, NSComboBoxDelegate {
+    private let handler: (String) -> Void
+
+    init(value: String, items: [String], onCommit: @escaping (String) -> Void) {
+        handler = onCommit
+        super.init(frame: .zero)
+        addItems(withObjectValues: items)
+        stringValue = value
+        numberOfVisibleItems = 12
+        completes = true
+        delegate = self
+        translatesAutoresizingMaskIntoConstraints = false
+        widthAnchor.constraint(equalToConstant: 240).isActive = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func comboBoxSelectionDidChange(_ notification: Notification) {
+        guard indexOfSelectedItem >= 0, let value = itemObjectValue(at: indexOfSelectedItem) as? String else { return }
+        // After the list closes: saving redraws the settings, this box included.
+        DispatchQueue.main.async { [handler] in handler(value) }
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        let value = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        DispatchQueue.main.async { [handler] in handler(value) }
     }
 }
 

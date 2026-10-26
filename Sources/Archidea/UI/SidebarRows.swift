@@ -755,3 +755,47 @@ final class DropIndicator {
         group.isHidden = true
     }
 }
+
+/// The light that runs over rows while the AI works on them: a soft band of colour sweeping across, again and again,
+/// until `stop()` fades it out.
+final class AIGlow: NSView {
+    private let sweep = CAGradientLayer()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = true
+        let colors: [NSColor] = [.clear, .systemPurple, .systemBlue, .systemPink, .clear]
+        sweep.colors = colors.map { $0.withAlphaComponent($0 == .clear ? 0 : 0.22).cgColor }
+        sweep.startPoint = CGPoint(x: 0, y: 0.5)
+        sweep.endPoint = CGPoint(x: 1, y: 0.5)
+        sweep.locations = [-0.8, -0.6, -0.4, -0.2, 0]
+        layer?.addSublayer(sweep)
+        let move = CABasicAnimation(keyPath: "locations")
+        move.fromValue = [-0.8, -0.6, -0.4, -0.2, 0]
+        move.toValue = [1.0, 1.2, 1.4, 1.6, 1.8]
+        move.duration = 1.4
+        move.repeatCount = .infinity
+        move.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        sweep.add(move, forKey: "sweep")
+        alphaValue = 0
+        NSAnimationContext.runAnimationGroup { $0.duration = 0.2; self.animator().alphaValue = 1 }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        sweep.frame = bounds
+    }
+
+    func stop() {
+        NSAnimationContext.runAnimationGroup({ $0.duration = 0.25; self.animator().alphaValue = 0 }, completionHandler: { [weak self] in
+            self?.removeFromSuperview()
+        })
+    }
+}
