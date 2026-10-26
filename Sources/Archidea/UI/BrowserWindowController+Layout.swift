@@ -120,8 +120,6 @@ extension BrowserWindowController {
             if setsApp { NSApp.appearance = NSAppearance(named: .darkAqua) }
             dark = true
         }
-        Trace.log("theme \(target.name): \(target.appearance.map { "\($0)" } ?? "system") setsApp=\(setsApp) key=\(window.isKeyWindow) "
-                  + "app=\(NSApp.appearance?.name.rawValue ?? "nil") effective=\(NSApp.effectiveAppearance.name.rawValue)")
         // Chromium follows the app's appearance for pages' prefers-color-scheme, so sites switch with the space.
         let background = Theme.sidebarLuminance(dark: dark, tint: tint, strength: strength)
         sidebar.appearance = NSAppearance(named: background > 0.5 ? .aqua : .darkAqua)
