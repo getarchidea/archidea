@@ -5,6 +5,10 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Swiping between spaces pages like Dia: the next space's list comes in beside the current one as your fingers
+  move, and on letting go it slides the rest of the way. Before, the list faded out, and the next one jumped in
+  after it.
+
 ## [0.5.1] - 2026-10-26
 
 - Dragging a tab no longer pushes the whole list down to make room for Favorites. With no favorites yet, the
