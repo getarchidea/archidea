@@ -3,11 +3,14 @@
 What changes in each Archidea release. The section for a version becomes its release notes and what the app shows
 under *What's new*.
 
+How entries are written: one short declarative line each, what was added or what was fixed ("Smooth swipe between
+spaces.", "Fixed: …"). No comparisons with other browsers, no explanations of how it was before or how it works.
+
 ## [Unreleased]
 
-- Swiping between spaces pages like Dia: the next space's list comes in beside the current one as your fingers
-  move, and on letting go it slides the rest of the way. Before, the list faded out, and the next one jumped in
-  after it.
+## [0.5.2] - 2026-10-26
+
+- Smooth swipe between spaces.
 
 ## [0.5.1] - 2026-10-26
 
