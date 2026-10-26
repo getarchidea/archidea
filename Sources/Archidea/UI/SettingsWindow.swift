@@ -5,7 +5,7 @@ import ArdiaCore
 /// Drift's own settings: a plain AppKit window, sections on the left, grouped cards on the right.
 final class SettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     enum Section: String, CaseIterable {
-        case general, tabs, spaces, privacy, extensions, shortcuts, advanced
+        case general, tabs, spaces, ai, privacy, extensions, shortcuts, advanced
 
         var title: String { L("settings.section.\(rawValue)") }
 
@@ -14,6 +14,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             case .general: return "gearshape"
             case .tabs: return "square.on.square"
             case .spaces: return "square.stack.3d.up"
+            case .ai: return "sparkles"
             case .privacy: return "hand.raised"
             case .extensions: return "puzzlepiece.extension"
             case .shortcuts: return "keyboard"
@@ -136,6 +137,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         case .general: return general()
         case .tabs: return tabs()
         case .spaces: return spaces()
+        case .ai: return ai()
         case .privacy: return privacy()
         case .extensions: return extensions()
         case .shortcuts: return shortcuts()
@@ -231,6 +233,84 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             self?.render()
         }
         return [SettingsCard(rows: rows), add]
+    }
+
+    /// The AI: which service, the key, the model, a check that it answers, and each feature on or off. Nothing AI
+    /// shows anywhere else until it's connected.
+    private func ai() -> [NSView] {
+        let service = AIService.shared
+        let current = settings.ai
+        let providers = AIProvider.allCases
+        let provider = popup(providers.map(\.name), selected: providers.firstIndex(of: current.provider) ?? 0) { [weak self] index in
+            self?.update {
+                $0.ai.provider = providers[index]
+                $0.ai.baseURL = ""
+                $0.ai.model = ""
+            }
+            self?.render()
+        }
+        let key = ClosureField(secure: true, value: service.storedKey,
+                               placeholder: service.keyFromEnvironment ? L("ai.key.fromEnvironment", current.provider.environmentKey)
+                                   : current.provider == .anthropic ? "sk-ant-…" : "sk-…") { [weak self] value in
+            guard value != service.storedKey else { return }
+            service.setKey(value)
+            self?.app?.settingsChanged()
+            self?.render()
+        }
+        let model = ClosureField(secure: false, value: current.model,
+                                 placeholder: current.provider.defaultModel.isEmpty ? L("ai.model.required") : current.provider.defaultModel) { [weak self] value in
+            guard value != current.model else { return }
+            self?.update { $0.ai.model = value }
+            self?.render()
+        }
+        let address = ClosureField(secure: false, value: current.baseURL, placeholder: current.provider.defaultBaseURL) { [weak self] value in
+            guard value != current.baseURL else { return }
+            self?.update { $0.ai.baseURL = value }
+            self?.render()
+        }
+        let status = NSTextField(wrappingLabelWithString: service.isConnected ? L("ai.status.ready") : L("ai.status.off"))
+        status.font = .systemFont(ofSize: 11)
+        status.textColor = .secondaryLabelColor
+        status.preferredMaxLayoutWidth = 220
+        weak var statusLabel = status
+        let check = button(L("ai.check")) {
+            statusLabel?.stringValue = L("ai.check.running")
+            Task { @MainActor in
+                do {
+                    _ = try await service.complete(AIRequest(system: "Reply with the single word OK.", prompt: "Ping", maxTokens: 16))
+                    statusLabel?.stringValue = L("ai.check.ok")
+                } catch {
+                    statusLabel?.stringValue = (error as? AIError ?? .failed(error.localizedDescription)).message
+                }
+            }
+        }
+        check.isEnabled = service.isConnected
+        let checkRow = NSStackView(views: [status, check])
+        checkRow.spacing = 10
+
+        let connection = SettingsCard(rows: [
+            SettingsRow(title: L("ai.provider"), detail: L("ai.provider.detail"), control: provider),
+            SettingsRow(title: L("ai.key"), detail: L("ai.key.detail"), control: key),
+            SettingsRow(title: L("ai.model"), detail: L("ai.model.detail"), control: model),
+            SettingsRow(title: L("ai.address"), detail: L("ai.address.detail"), control: address),
+            SettingsRow(title: L("ai.connection"), detail: nil, control: checkRow),
+        ])
+
+        let switches: [(String, String, Bool, (inout AISettings, Bool) -> Void)] = [
+            ("ai.feature.ask", "ai.feature.ask.detail", current.ask, { $0.ask = $1 }),
+            ("ai.feature.titles", "ai.feature.titles.detail", current.shortTitles, { $0.shortTitles = $1 }),
+            ("ai.feature.tidy", "ai.feature.tidy.detail", current.tidy, { $0.tidy = $1 }),
+        ]
+        let features = SettingsCard(rows: switches.map { title, detail, on, set in
+            let toggle = ClosureSwitch(on: on) { [weak self] value in self?.update { set(&$0.ai, value) } }
+            toggle.isEnabled = service.isConnected
+            return SettingsRow(title: L(title), detail: L(detail), control: toggle)
+        })
+        let note = NSTextField(wrappingLabelWithString: L("ai.note"))
+        note.font = .systemFont(ofSize: 11)
+        note.textColor = .secondaryLabelColor
+        note.preferredMaxLayoutWidth = 480
+        return [connection, features, note]
     }
 
     private func privacy() -> [NSView] {
@@ -564,6 +644,38 @@ private final class ClosureSwitch: NSSwitch {
     required init?(coder: NSCoder) { fatalError() }
 
     @objc private func changed() { handler(state == .on) }
+}
+
+/// A text setting, saved when Return is pressed or the field is left; a secure one for keys.
+private final class ClosureField: NSView, NSTextFieldDelegate {
+    private let field: NSTextField
+    private let handler: (String) -> Void
+
+    init(secure: Bool, value: String, placeholder: String, onCommit: @escaping (String) -> Void) {
+        field = secure ? NSSecureTextField() : NSTextField()
+        handler = onCommit
+        super.init(frame: .zero)
+        field.stringValue = value
+        field.placeholderString = placeholder
+        field.lineBreakMode = .byTruncatingTail
+        field.cell?.isScrollable = true
+        field.delegate = self
+        field.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(field)
+        NSLayoutConstraint.activate([
+            field.leadingAnchor.constraint(equalTo: leadingAnchor),
+            field.trailingAnchor.constraint(equalTo: trailingAnchor),
+            field.topAnchor.constraint(equalTo: topAnchor),
+            field.bottomAnchor.constraint(equalTo: bottomAnchor),
+            widthAnchor.constraint(equalToConstant: 240),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        handler(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
 }
 
 private final class ClosurePopUp: NSPopUpButton {

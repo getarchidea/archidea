@@ -5,6 +5,14 @@ under *What's new*.
 
 ## [Unreleased]
 
+- AI, with your own key (Settings → AI): Anthropic, or any service with an OpenAI-compatible API (OpenAI, OpenRouter,
+  a local Ollama). Nothing AI shows until it's connected, private windows never use it, and every feature can be
+  turned off. The default model is the cheapest that does the job; only tab titles and sites are sent, never pages.
+  - *Ask AI* in the address bar: type a question after ⌘T and press Tab, the answer is written right there. When the
+    service can't answer (no credit, a wrong key, no connection) it says so plainly and offers the search instead.
+  - Short tab names: long page titles get a short one in the sidebar. A name you give a tab still wins.
+  - *Tidy* next to Today's *Clear*: the AI groups Today's tabs by topic, and once you confirm each group becomes a
+    folder among the pinned tabs.
 - *Search … for “…”* in a page's menu uses the search engine you picked in Settings. It always searched
   DuckDuckGo, the engine's own default.
 - Clicking into the address while editing it places the caret there. A click on the address bar opened over the

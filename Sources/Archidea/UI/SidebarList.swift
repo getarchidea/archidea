@@ -194,8 +194,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             if item.isFolder {
                 if !title.isEmpty { item.title = title }
             } else {
-                // Emptied, or set back to the page's own title: the tab follows the page again.
-                item.customTitle = title.isEmpty || title == item.title ? nil : title
+                // Emptied, or left at the page's own title (or its short name): the tab follows the page again.
+                item.customTitle = title.isEmpty || title == item.title || title == item.shortTitle ? nil : title
             }
         }
         if let label, outline.window?.firstResponder === label.currentEditor() { outline.window?.makeFirstResponder(nil) }
@@ -343,6 +343,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             divider.showsClear = space.today.count >= 3 && clearable > 0
             divider.clearTip = L("today.clear.tip", clearable)
             divider.onClear = { [weak self] in self?.delegate?.sidebarClearToday() }
+            divider.showsTidy = delegate?.sidebarCanTidy() ?? false
+            divider.onTidy = { [weak self] in self?.delegate?.sidebarTidy() }
             return divider
         }
         guard let item = item as? SidebarItem else { return nil }

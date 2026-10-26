@@ -70,6 +70,9 @@ protocol SidebarViewDelegate: AnyObject {
     func sidebarSwapSides(_ split: SidebarItem)
     func sidebarDragBegan()
     func sidebarDragEnded()
+    /// Tidy Today with the AI: offered while it's connected and Today has enough tabs.
+    func sidebarCanTidy() -> Bool
+    func sidebarTidy()
 }
 
 final class SidebarMarker {
@@ -408,6 +411,9 @@ final class SidebarView: NSView, WindowDragSurface {
             let closed = delegate?.sidebarClosedCount() ?? 0
             if closed > 0 {
                 menu.addItem(ClosureMenuItem(L("tabs.reopenClosed")) { [weak self] in self?.delegate?.sidebarReopenClosed() })
+            }
+            if delegate?.sidebarCanTidy() == true {
+                menu.addItem(ClosureMenuItem(L("ai.tidy.menu")) { [weak self] in self?.delegate?.sidebarTidy() })
             }
             let clearable = delegate?.sidebarClearableCount() ?? 0
             if clearable > 0 {

@@ -100,6 +100,10 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     /// An incognito window: an off-the-record profile and a sidebar kept only in memory.
     var isPrivate: Bool { profile.offTheRecord }
+    /// The AI is connected in Settings and this isn't a private window, whose pages and questions stay here.
+    var usesAI: Bool { !isPrivate && AIService.shared.isConnected }
+    /// The command bar offers "Ask AI".
+    var asksAI: Bool { usesAI && settings.ai.ask }
 
     /// The browser-wide settings (search engine, archiving, the blocker…), the same in every window.
     var settings: BrowserSettings { preferences.state.settings }
@@ -417,6 +421,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         URLInput.engine = settings.searchEngine
         AddressPill.showsFullURL = settings.showFullURL
         runtime.unloadMinutes = settings.unloadMinutes
+        AIService.shared.settings = settings.ai
+        SidebarItem.showsShortTitles = settings.ai.shortTitles && AIService.shared.isConnected
         if !isPrivate {
             BundledExtension.adBlocker.apply(settings.adBlock, to: profile)
             BundledExtension.cookieBanners.apply(settings.hideCookieBanners, to: profile)

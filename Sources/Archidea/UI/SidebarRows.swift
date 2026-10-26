@@ -579,39 +579,55 @@ final class SoundButton: ChromeButton {
 
 final class DividerCell: NSTableCellView {
     var onClear: (() -> Void)?
+    /// Tidy: the AI sorts Today into folders (shown only while it's connected).
+    var onTidy: (() -> Void)?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        return hit === clear ? hit : nil
+        return hit === clear || hit === tidy ? hit : nil
     }
     var showsClear = false { didSet { clear.isHidden = !showsClear } }
+    var showsTidy = false { didSet { tidy.isHidden = !showsTidy } }
     var clearTip: String? { didSet { clear.toolTip = clearTip } }
     private let clear = FirstMouseButton(title: L("today.clear"), target: nil, action: nil)
+    private let tidy = FirstMouseButton(title: L("ai.tidy.button"), target: nil, action: nil)
     private let line = NSView()
 
     init() {
         super.init(frame: .zero)
         line.wantsLayer = true
         addSubview(line)
-        clear.isBordered = false
-        clear.font = .systemFont(ofSize: 11, weight: .medium)
-        clear.contentTintColor = .tertiaryLabelColor
-        clear.target = self
-        clear.action = #selector(clearTapped)
-        addSubview(clear)
+        for (button, action) in [(clear, #selector(clearTapped)), (tidy, #selector(tidyTapped))] {
+            button.isBordered = false
+            button.font = .systemFont(ofSize: 11, weight: .medium)
+            button.contentTintColor = .tertiaryLabelColor
+            button.target = self
+            button.action = action
+            addSubview(button)
+        }
+        tidy.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
+        tidy.imagePosition = .imageLeading
+        tidy.toolTip = L("ai.tidy.tip")
+        tidy.isHidden = true
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override func layout() {
         super.layout()
-        let width = clear.isHidden ? 0 : clear.intrinsicContentSize.width + 8
-        line.frame = NSRect(x: 20, y: bounds.midY, width: bounds.width - 40 - width, height: 1)
+        var right = bounds.width - 20
+        for button in [clear, tidy] where !button.isHidden {
+            let width = button.intrinsicContentSize.width
+            button.frame = NSRect(x: right - width, y: (bounds.height - 16) / 2, width: width, height: 16)
+            right -= width + 10
+        }
+        line.frame = NSRect(x: 20, y: bounds.midY, width: max(0, right - 20), height: 1)
         line.layer?.backgroundColor = Theme.hairline.cgColor
-        clear.frame = NSRect(x: bounds.width - 20 - width + 8, y: (bounds.height - 16) / 2, width: width - 8, height: 16)
     }
 
     @objc private func clearTapped() { onClear?() }
+    @objc private func tidyTapped() { onTidy?() }
 }
 
 final class FirstMouseButton: NSButton {
