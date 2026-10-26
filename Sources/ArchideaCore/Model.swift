@@ -161,6 +161,11 @@ public final class Space: Codable {
     public var appearance: Appearance?
     public var pinned: [SidebarItem]
     public var today: [SidebarItem]
+    /// The favourites: tabs shown as tiles above the pins, the same in every space (`AppState.favorites`, which every
+    /// space of the state is handed). They're held in a folder of their own that no list shows, so a favourite is a
+    /// pin in every way (it keeps its home address, its place, ⇧⌘T brings it back there) and moving one in or out is
+    /// moving it to or from that folder (`Slot.folder(favorites)`). Tabs only.
+    public internal(set) var favorites: SidebarItem
 
     public init(name: String, symbol: String, colorHex: String) {
         id = UUID()
@@ -169,6 +174,7 @@ public final class Space: Codable {
         self.colorHex = colorHex
         pinned = []
         today = []
+        favorites = SidebarItem(folder: "")
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -185,9 +191,16 @@ public final class Space: Codable {
         appearance = try? c.decodeIfPresent(Appearance.self, forKey: .appearance)
         pinned = try c.decodeIfPresent([SidebarItem].self, forKey: .pinned) ?? []
         today = try c.decodeIfPresent([SidebarItem].self, forKey: .today) ?? []
+        // Its state hands it the shared one.
+        favorites = SidebarItem(folder: "")
     }
 
-    public var allTabs: [SidebarItem] { pinned.flatMap(\.allTabs) + today.flatMap(\.allTabs) }
+    /// Top to bottom: the favourites, the pins, Today.
+    public var allTabs: [SidebarItem] { favorites.allTabs + ownTabs }
+    /// The tabs this space alone has: its pins and Today, not the favourites every space shows.
+    public var ownTabs: [SidebarItem] { pinned.flatMap(\.allTabs) + today.flatMap(\.allTabs) }
+
+    public func isFavorite(_ item: SidebarItem) -> Bool { favorites.children.contains { $0 === item } }
 
     public func find(_ id: UUID) -> SidebarItem? {
         func search(_ items: [SidebarItem]) -> SidebarItem? {
@@ -197,10 +210,10 @@ public final class Space: Codable {
             }
             return nil
         }
-        return search(pinned) ?? search(today)
+        return search([favorites] + pinned) ?? search(today)
     }
 
-    /// Whether the item (or the split it's one side of) is among the pins rather than in Today.
+    /// Whether the item (or the split it's one side of) is among the pins (or the favourites) rather than in Today.
     public func isPinned(_ item: SidebarItem) -> Bool {
         let row = row(of: item)
         return !today.contains { $0 === row }
@@ -211,6 +224,7 @@ public final class Space: Codable {
     public func location(of item: SidebarItem) -> (parent: SidebarItem?, inToday: Bool, index: Int)? {
         if let index = today.firstIndex(where: { $0 === item }) { return (nil, true, index) }
         if let index = pinned.firstIndex(where: { $0 === item }) { return (nil, false, index) }
+        if let index = favorites.children.firstIndex(where: { $0 === item }) { return (favorites, false, index) }
         func search(_ container: SidebarItem) -> (SidebarItem, Int)? {
             if let index = container.children.firstIndex(where: { $0 === item }) { return (container, index) }
             for child in container.children where !child.isTab {
@@ -394,7 +408,11 @@ public final class AppState: Codable {
     }
 
     public private(set) var version = AppState.schemaVersion
-    public var spaces: [Space]
+    public var spaces: [Space] {
+        didSet { linkFavorites() }
+    }
+    /// The favourites every space shows (`Space.favorites`).
+    public private(set) var favorites: SidebarItem
     /// What each browser window shows, the one opened first first. There is always at least one.
     public var windows: [WindowState]
     public var sidebarWidth: Double
@@ -410,12 +428,18 @@ public final class AppState: Codable {
     public init() {
         let home = Space(name: "Home", symbol: "house", colorHex: "#7C8CF8")
         spaces = [home]
+        favorites = SidebarItem(folder: "")
         windows = [WindowState(spaceID: home.id)]
         sidebarWidth = 248
+        linkFavorites()
+    }
+
+    private func linkFavorites() {
+        for space in spaces where space.favorites !== favorites { space.favorites = favorites }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, spaces, windows, sidebarWidth, recentlyClosed, storedSettings
+        case version, spaces, windows, sidebarWidth, recentlyClosed, storedSettings, favorites
     }
 
     /// What version 1 kept of its one window: the current space, the sidebar hidden or not, each space's tab in front.
@@ -428,6 +452,8 @@ public final class AppState: Codable {
         _ = try? c.decodeIfPresent(Int.self, forKey: .version)
         version = Self.schemaVersion
         spaces = try c.decodeIfPresent([Space].self, forKey: .spaces) ?? []
+        favorites = (try? c.decodeIfPresent(SidebarItem.self, forKey: .favorites)) ?? SidebarItem(folder: "")
+        favorites.kind = .folder
         // The windows only say how the sidebar was looked at: a list that doesn't read costs that, not the sidebar.
         windows = (try? c.decodeIfPresent([WindowState].self, forKey: .windows)) ?? []
         if windows.isEmpty {
@@ -445,6 +471,7 @@ public final class AppState: Codable {
         // Only a convenience: a list that doesn't read is dropped rather than costing the sidebar.
         recentlyClosed = (try? c.decodeIfPresent([ClosedTab].self, forKey: .recentlyClosed)) ?? []
         storedSettings = try? c.decodeIfPresent(BrowserSettings.self, forKey: .storedSettings)
+        linkFavorites()
     }
 
     /// The space `window` shows.
@@ -511,6 +538,17 @@ public final class AppState: Codable {
             }
         }
         guard let first = spaces.first else { return changed }
+        // The favourites hold tabs of their own, each with its home address; anything else joins the first space's pins.
+        let notTabs = favorites.children.filter { !$0.isTab }
+        if !notTabs.isEmpty {
+            favorites.children.removeAll { !$0.isTab }
+            first.pinned += notTabs
+            changed = true
+        }
+        for item in favorites.children where item.pinnedURL == nil {
+            item.pinnedURL = item.url
+            changed = true
+        }
         if windows.isEmpty {
             windows = [WindowState(spaceID: first.id)]
             changed = true

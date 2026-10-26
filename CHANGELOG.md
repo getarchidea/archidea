@@ -5,6 +5,11 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Favorites: tabs as tiles above the pinned ones, the same in every space, as in Arc. Drag a tab onto the top of the
+  list (while you drag, an empty spot shows where), or choose *Add to Favorites* in its menu. Three to a row, each row
+  stretching to the sidebar's width. A click opens one, a middle click unloads it, a drag reorders the tiles or takes
+  one back to the list; its menu can send it back to the pinned tabs. Like a pinned tab, a favorite keeps its home
+  address, and switching spaces leaves the tiles where they are.
 - Clicking into the address while editing it places the caret there. A click on the address bar opened over the
   sidebar closed it and opened it again with everything selected, so only the arrow keys moved the caret.
 

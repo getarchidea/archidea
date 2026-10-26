@@ -68,6 +68,10 @@ protocol SidebarViewDelegate: AnyObject {
     /// A split's tab closes from its own button: it leaves the split.
     func sidebarClosePane(_ item: SidebarItem)
     func sidebarSwapSides(_ split: SidebarItem)
+    /// Makes `item` a favourite at `index` among them (nil: the last), or moves one that is.
+    func sidebarFavorite(_ item: SidebarItem, at index: Int?)
+    /// A favourite goes back among the pins, at their top.
+    func sidebarUnfavorite(_ item: SidebarItem)
     func sidebarDragBegan()
     func sidebarDragEnded()
 }
@@ -88,13 +92,18 @@ final class SidebarView: NSView, WindowDragSurface {
     typealias Container = Space.Slot
 
     weak var delegate: SidebarViewDelegate? {
-        didSet { list.delegate = delegate }
+        didSet {
+            list.delegate = delegate
+            favorites.delegate = delegate
+        }
     }
     private let store: Store
     private let windowState: WindowState
     private var space: Space { store.state.space(shownIn: windowState) }
     /// The pins and Today.
     let list: SidebarList
+    /// The favourites, above the list. Every space shows them, so a swipe to another space leaves them where they are.
+    private let favorites = FavoritesGrid()
     private var outline: SidebarOutline { list.outline }
     private var scroll: ThinScrollView { list.scroll }
 
@@ -198,6 +207,9 @@ final class SidebarView: NSView, WindowDragSurface {
         }
         addSubview(slideClip)
         slideClip.addSubview(header)
+        favorites.onResize = { [weak self] in self?.favoritesResized() }
+        slideClip.addSubview(favorites)
+        list.onDrag = { [weak self] dragging in self?.favorites.dragging = dragging }
 
         list.emptyAreaMenu = { [weak self] in
             guard let self else { return NSMenu() }
@@ -242,7 +254,9 @@ final class SidebarView: NSView, WindowDragSurface {
         let top = TrafficLights.centerY - origin + 20
         address.frame = NSRect(x: 12, y: top, width: width - 24, height: 38)
         header.frame = NSRect(x: 12, y: top + 48, width: width - 24, height: 28)
-        let listTop = top + 80
+        let grid = favorites.contentHeight
+        favorites.frame = NSRect(x: 12, y: top + 80, width: width - 24, height: grid)
+        let listTop = top + 80 + (grid > 0 ? grid + 8 : 0)
         let banner: CGFloat = updateVersion == nil ? 0 : 58
         scroll.frame = NSRect(x: 0, y: listTop, width: width, height: max(0, height - listTop - 48 - banner))
         updateBanner.frame = NSRect(x: 10, y: height - 48 - banner + 4, width: width - 20, height: max(0, banner - 8))
@@ -259,6 +273,18 @@ final class SidebarView: NSView, WindowDragSurface {
     // MARK: public
 
     var addressAnchor: NSView { address }
+
+    /// The favourites came or went (or a drag wants room for the first): the list moves to make room, smoothly.
+    private func favoritesResized() {
+        needsLayout = true
+        guard window != nil else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+            context.allowsImplicitAnimation = true
+            layoutSubtreeIfNeeded()
+        }
+    }
 
     // MARK: following a swipe
 
@@ -325,13 +351,26 @@ final class SidebarView: NSView, WindowDragSurface {
     /// the new space sits on.
     func reload(direction: Int = 0) {
         list.reload(direction: direction)
+        favorites.show(space, selected: windowState.selectedID(in: space))
         header.show(space)
         rebuildSpaces()
     }
 
-    func reloadItem(_ item: SidebarItem, folders: Bool = false) { list.reloadItem(item, folders: folders) }
-    func reflectSelection() { list.reflectSelection() }
-    func reveal(_ item: SidebarItem) { list.reveal(item) }
+    func reloadItem(_ item: SidebarItem, folders: Bool = false) {
+        if space.isFavorite(item) { favorites.reload(item) } else { list.reloadItem(item, folders: folders) }
+    }
+
+    func reflectSelection() {
+        list.reflectSelection()
+        favorites.reflectSelection(windowState.selectedID(in: space))
+    }
+
+    /// A favourite is always in view; a tab in the list has its folders opened and is scrolled to.
+    func reveal(_ item: SidebarItem) {
+        guard !space.isFavorite(item) else { return reflectSelection() }
+        list.reveal(item)
+        favorites.reflectSelection(windowState.selectedID(in: space))
+    }
     func rename(_ item: SidebarItem, selectAll: Bool = false) { list.rename(item, selectAll: selectAll) }
     func toggleFolder(_ folder: SidebarItem) { list.toggleFolder(folder) }
     /// In the middle of something (a rename, its menu): slid out over the page, the sidebar stays out until it's done.

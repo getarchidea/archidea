@@ -457,3 +457,7 @@
 "site.cookieBanners" = "Скрывать баннеры о cookie";
 "onboarding.cookieBanners.title" = "Скрывать баннеры о cookie";
 "onboarding.cookieBanners.text" = "На окна про cookie — «отклонить всё», или они просто прячутся. Выключается в настройках.";
+"favorites.add" = "Добавить в избранное";
+"favorites.unfavorite" = "Перенести в закреплённые";
+"favorites.delete" = "Удалить";
+"favorites.drop" = "Перетащите сюда — в избранное";

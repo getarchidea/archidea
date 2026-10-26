@@ -10,6 +10,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     weak var delegate: SidebarViewDelegate?
     /// The menu for the list's empty space: the space's own, which the sidebar builds.
     var emptyAreaMenu: (() -> NSMenu)?
+    /// A row's drag began (true) or ended: the favourites make room to take it.
+    var onDrag: ((Bool) -> Void)?
 
     let outline = SidebarOutline()
     let scroll = SidebarScroll()
@@ -145,7 +147,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func reveal(_ side: SidebarItem) {
         let item = space.row(of: side)
         var parent = space.location(of: item)?.parent
-        while let folder = parent {
+        while let folder = parent, folder !== space.favorites {
             if !outline.isItemExpanded(folder) { Self.animateRows { outline.animator().expandItem(folder) } }
             parent = space.location(of: folder)?.parent
         }
@@ -430,8 +432,9 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint,
                      forItems draggedItems: [Any]) {
-        // A tab can also be let go over the page, to open beside it.
+        // A tab can also be let go over the page, to open beside it, or over the favourites.
         delegate?.sidebarDragBegan()
+        onDrag?(true)
         guard let folder = draggedItems.first as? SidebarItem, folder.isFolder, outlineView.isItemExpanded(folder) else { return }
         foldedForDrag = folder
         outlineView.collapseItem(folder)
@@ -440,6 +443,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint,
                      operation: NSDragOperation) {
         delegate?.sidebarDragEnded()
+        onDrag?(false)
         guard let folder = foldedForDrag else { return }
         foldedForDrag = nil
         if outlineView.row(forItem: folder) >= 0 { outlineView.expandItem(folder) }
@@ -492,6 +496,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         let pinned = space.isPinned(item)
         menu.addItem(ClosureMenuItem(pinned ? L("tab.unpin") : L("tab.pin")) { [weak self] in self?.delegate?.sidebarTogglePin(item) })
+        menu.addItem(ClosureMenuItem(L("favorites.add")) { [weak self] in self?.delegate?.sidebarFavorite(item, at: nil) })
         if pinned, let home = item.pinnedURL, home != item.url {
             menu.addItem(ClosureMenuItem(L("tab.resetPin")) { [weak self] in self?.delegate?.sidebarResetPin(item) })
         }

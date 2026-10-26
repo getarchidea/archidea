@@ -118,6 +118,8 @@ extension BrowserWindowController {
     func sidebarUnfollow(_ folder: SidebarItem) { unfollow(folder) }
     func sidebarClosePane(_ item: SidebarItem) { closePane(item) }
     func sidebarSwapSides(_ split: SidebarItem) { swapSides(split) }
+    func sidebarFavorite(_ item: SidebarItem, at index: Int?) { favorite(item, at: index) }
+    func sidebarUnfavorite(_ item: SidebarItem) { unfavorite(item) }
     func sidebarDragBegan() { dragFromSidebarBegan() }
     func sidebarDragEnded() { dragFromSidebarEnded() }
 }
