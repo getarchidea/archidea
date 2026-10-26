@@ -659,7 +659,8 @@ private final class ChatView: NSView {
         let question = NSMutableParagraphStyle()
         question.paragraphSpacingBefore = 4
         question.paragraphSpacing = 4
-        let all = turns.map { ($0.question, Optional($0.answer)) } + (lastQuestion.map { [($0, Optional<String>.none)] } ?? [])
+        var all: [(String, String?)] = turns.map { ($0.question, $0.answer) }
+        if let lastQuestion { all.append((lastQuestion, nil)) }
         for (index, turn) in all.enumerated() {
             if index > 0 { text.append(NSAttributedString(string: "\n\n")) }
             text.append(NSAttributedString(string: turn.0 + "\n", attributes: [
