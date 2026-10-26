@@ -70,6 +70,12 @@ protocol SidebarViewDelegate: AnyObject {
     func sidebarSwapSides(_ split: SidebarItem)
     func sidebarDragBegan()
     func sidebarDragEnded()
+    /// Tidy Today with the AI: offered while it's connected and Today has enough tabs.
+    func sidebarCanTidy() -> Bool
+    func sidebarTidy()
+    /// "Rename with AI" in a tab's menu.
+    func sidebarCanRenameWithAI() -> Bool
+    func sidebarRenameWithAI(_ item: SidebarItem)
 }
 
 final class SidebarMarker {
@@ -330,6 +336,19 @@ final class SidebarView: NSView, WindowDragSurface {
     }
 
     func reloadItem(_ item: SidebarItem, folders: Bool = false) { list.reloadItem(item, folders: folders) }
+    /// A glow over the rows of `items` while the AI works on them; `stop()` fades it.
+    func glow(over items: [SidebarItem]) -> AIGlow? { list.glow(over: items) }
+
+    /// The list changes all at once (Tidy's folders), crossfading.
+    func reload(fading: Bool) {
+        if fading, let layer = scroll.layer {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = 0.3
+            layer.add(fade, forKey: "fade")
+        }
+        reload()
+    }
     func reflectSelection() { list.reflectSelection() }
     func reveal(_ item: SidebarItem) { list.reveal(item) }
     func rename(_ item: SidebarItem, selectAll: Bool = false) { list.rename(item, selectAll: selectAll) }
@@ -408,6 +427,9 @@ final class SidebarView: NSView, WindowDragSurface {
             let closed = delegate?.sidebarClosedCount() ?? 0
             if closed > 0 {
                 menu.addItem(ClosureMenuItem(L("tabs.reopenClosed")) { [weak self] in self?.delegate?.sidebarReopenClosed() })
+            }
+            if delegate?.sidebarCanTidy() == true {
+                menu.addItem(ClosureMenuItem(L("ai.tidy.menu")) { [weak self] in self?.delegate?.sidebarTidy() })
             }
             let clearable = delegate?.sidebarClearableCount() ?? 0
             if clearable > 0 {

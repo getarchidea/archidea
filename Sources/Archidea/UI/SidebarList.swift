@@ -111,7 +111,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
         }
         reflecting = true
-        restore(space.pinned)
+        restore(space.pinned + space.today)
         reflecting = false
         reflectSelection()
     }
@@ -158,6 +158,16 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             if row >= 0 { outline.scrollRowToVisible(row) }
         }
         reflectSelection()
+    }
+
+    /// A glow over the rows of `items` (in the list, so it scrolls with them) while the AI works on them.
+    func glow(over items: [SidebarItem]) -> AIGlow? {
+        let rects = items.map { outline.row(forItem: space.row(of: $0)) }.filter { $0 >= 0 }.map { outline.rect(ofRow: $0) }
+        guard var area = rects.first else { return nil }
+        for rect in rects.dropFirst() { area = area.union(rect) }
+        let glow = AIGlow(frame: area.insetBy(dx: 8, dy: 0))
+        outline.addSubview(glow)
+        return glow
     }
 
     /// The row's own label becomes editable, so the name stays exactly where it was drawn.
@@ -343,6 +353,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             divider.showsClear = space.today.count >= 3 && clearable > 0
             divider.clearTip = L("today.clear.tip", clearable)
             divider.onClear = { [weak self] in self?.delegate?.sidebarClearToday() }
+            divider.showsTidy = delegate?.sidebarCanTidy() ?? false
+            divider.onTidy = { [weak self] in self?.delegate?.sidebarTidy() }
             return divider
         }
         guard let item = item as? SidebarItem else { return nil }
@@ -486,6 +498,10 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
             menu.addItem(ClosureMenuItem(L("item.rename")) { [weak self] in DispatchQueue.main.async { self?.rename(item) } })
             menu.addItem(ClosureMenuItem(L("folder.icon")) { [weak self] in self?.pickIcon(for: item) })
+            // A folder lives in either list, with its tabs.
+            menu.addItem(ClosureMenuItem(space.isPinned(item) ? L("tab.unpin") : L("tab.pin")) { [weak self] in
+                self?.delegate?.sidebarTogglePin(item)
+            })
             menu.addItem(.separator())
             menu.addItem(ClosureMenuItem(L("folder.delete")) { [weak self] in self?.delegate?.sidebarDeleteFolder(item) })
             return
@@ -496,6 +512,11 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             menu.addItem(ClosureMenuItem(L("tab.resetPin")) { [weak self] in self?.delegate?.sidebarResetPin(item) })
         }
         menu.addItem(ClosureMenuItem(L("item.rename")) { [weak self] in DispatchQueue.main.async { self?.rename(item) } })
+        if delegate?.sidebarCanRenameWithAI() == true {
+            let ai = ClosureMenuItem(L("ai.rename.menu")) { [weak self] in self?.delegate?.sidebarRenameWithAI(item) }
+            ai.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
+            menu.addItem(ai)
+        }
         if item.customTitle != nil {
             menu.addItem(ClosureMenuItem(L("tab.resetName")) { [weak self] in
                 item.customTitle = nil
