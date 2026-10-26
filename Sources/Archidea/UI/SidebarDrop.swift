@@ -53,8 +53,6 @@ struct SidebarDrop {
                 return nil
             }
         }
-        // Folders live among the pins; one let go in Today joins the end of the pins.
-        if moving.isFolder, case .today = target.container { target = Target(container: .pinned, index: space.pinned.count) }
         if case let .folder(folder) = target.container, space.contains(moving, descendant: folder) { return nil }
         return target
     }

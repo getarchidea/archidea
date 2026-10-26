@@ -22,7 +22,7 @@ extension BrowserWindowController {
                 Trace.log("following: no feed found")
                 return showNotice(L("live.none.title"), detail: L("live.none.detail"))
             }
-            if let existing = LiveFolders.liveFolders(in: space.pinned).first(where: { $0.feed?.url == feedURL.absoluteString }) {
+            if let existing = LiveFolders.liveFolders(in: space.pinned + space.today).first(where: { $0.feed?.url == feedURL.absoluteString }) {
                 existing.expanded = true
                 reloadSidebar()
                 sidebar.reveal(existing)

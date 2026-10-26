@@ -12,6 +12,15 @@ extension BrowserWindowController {
         loadingBar.show(loading: tab.loading, progress: tab.progress)
     }
 
+    /// A search for the page's selected text opens in front, in a tab by the page it came from.
+    func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, searchFor text: String) {
+        let item = SidebarItem(tab: URLInput.search(text))
+        let index = runtime.item(for: tab).flatMap { source in space.today.firstIndex { $0 === space.row(of: source) } } ?? 0
+        space.today.insert(item, at: index)
+        reloadSidebar()
+        select(item, cause: "search-selection")
+    }
+
     /// Pages change all the time (loading, sound, back and forward); the sidebar is only written out again when
     /// what it keeps changed, and the icon only when the page has a new one.
     func runtime(_ runtime: TabRuntime, didUpdate item: SidebarItem, change: TabChange) {

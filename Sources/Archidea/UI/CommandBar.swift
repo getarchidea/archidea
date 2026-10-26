@@ -6,6 +6,8 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     enum Suggestion {
         case open(String)
         case search(String)
+        /// Asks the AI connected in Settings; the answer shows in the bar.
+        case ask(String)
         case tab(SidebarItem, space: String?)
         case history(url: String, title: String)
 
@@ -13,7 +15,7 @@ final class CommandBar: NSView, NSTextFieldDelegate {
             switch self {
             case let .open(url), let .history(url, _): url
             case let .tab(item, _): item.url
-            case .search: nil
+            case .search, .ask: nil
             }
         }
     }
@@ -35,6 +37,10 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     private var anchor: NSRect?
     /// The start page's search field, when the bar opens from it: the bar takes its place, at its width.
     private var over: NSRect?
+    /// The conversation with the AI, in place of the suggestions, once a question is asked; the field then takes
+    /// follow-up questions.
+    private var answer: ChatView?
+    private var answering: Task<Void, Never>?
 
     private struct Metrics {
         let fieldHeight: CGFloat, rowHeight: CGFloat, fontSize: CGFloat, glyph: CGFloat, radius: CGFloat
@@ -147,6 +153,7 @@ final class CommandBar: NSView, NSTextFieldDelegate {
 
     func hide() {
         guard isOpen else { return }
+        endAnswer()
         removeFromSuperview()
         controller?.commandBarDidHide()
     }
@@ -167,10 +174,20 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         return super.hitTest(point)
     }
 
+    /// The card's width, which doesn't depend on what it shows.
+    private var cardWidth: CGFloat {
+        if let anchor {
+            let x = max(4, anchor.minX - 4)
+            return min(max(anchor.width + 8, 400), bounds.width - x - 8)
+        }
+        if let over { return over.width }
+        return min(660, bounds.width - 64)
+    }
+
     override func layout() {
         super.layout()
         let m = metrics
-        let listHeight = rows.isEmpty ? 0 : CGFloat(rows.count) * m.rowHeight + 12
+        let listHeight = answer.map { $0.height(forWidth: cardWidth) } ?? (rows.isEmpty ? 0 : CGFloat(rows.count) * m.rowHeight + 12)
         let height = m.fieldHeight + listHeight
         if let anchor {
             let x = max(4, anchor.minX - 4)
@@ -194,7 +211,8 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         glyph.frame = NSRect(x: 16, y: fieldTop + (m.fieldHeight - 18) / 2, width: 18, height: 18)
         field.frame = NSRect(x: 44, y: fieldTop + (m.fieldHeight - lineHeight) / 2, width: width - 60, height: lineHeight)
         separator.frame = NSRect(x: 0, y: fieldTop, width: width, height: 1)
-        separator.isHidden = rows.isEmpty
+        separator.isHidden = rows.isEmpty && answer == nil
+        answer?.frame = NSRect(x: 0, y: 0, width: width, height: listHeight)
         var y = fieldTop - 6 - m.rowHeight
         for row in rows {
             row.frame = NSRect(x: 6, y: y, width: width - 12, height: m.rowHeight)
@@ -209,7 +227,9 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         var list: [Suggestion] = []
         let unchanged = editing && field.stringValue == (current ?? "")
         if !text.isEmpty, !unchanged {
-            list.append(URLInput.isSearch(text) ? .search(text) : .open(URLInput.resolve(text)))
+            let search = URLInput.isSearch(text)
+            list.append(search ? .search(text) : .open(URLInput.resolve(text)))
+            if search, controller?.asksAI == true { list.append(.ask(text)) }
         }
         let browsing = text.isEmpty || unchanged
         let tabs = matchingTabs(browsing ? "" : text.lowercased(), limit: browsing ? 5 : 4)
@@ -267,7 +287,7 @@ final class CommandBar: NSView, NSTextFieldDelegate {
                 rows[index].setFavicon(image)
             }
             return nil
-        case .search: return nil
+        case .search, .ask: return nil
         }
     }
 
@@ -283,6 +303,7 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     private func run(_ index: Int) {
         guard index >= 0, index < suggestions.count, let controller else { return }
         let suggestion = suggestions[index]
+        if case let .ask(question) = suggestion { return ask(question) }
         let beside = opensBeside, editing = self.editing
         hide()
         let open = { (input: String) in
@@ -291,6 +312,7 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         switch suggestion {
         case let .open(url): open(url)
         case let .search(query): open(query)
+        case .ask: break
         case let .tab(item, _): controller.select(item, cause: "command-bar")
         case let .history(url, _): open(url)
         }
@@ -304,9 +326,74 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     }
     #endif
 
+    // MARK: asking the AI
+
+    private func ask(_ question: String) {
+        answering?.cancel()
+        let view: ChatView
+        if let answer {
+            view = answer
+        } else {
+            rows.forEach { $0.removeFromSuperview() }
+            rows = []
+            suggestions = []
+            selected = -1
+            view = ChatView(model: AIService.shared.settings.resolvedModel)
+            view.onCopy = { [weak view] in
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(view?.lastAnswer ?? "", forType: .string)
+            }
+            view.onSearch = { [weak self, weak view] in
+                guard let self, let controller, let question = view?.lastQuestion else { return }
+                let beside = opensBeside, editing = self.editing
+                hide()
+                if editing { controller.navigate(question) } else if beside { controller.openBeside(question) } else { controller.openInNewTab(question) }
+            }
+            view.onSettings = { [weak self] in
+                self?.hide()
+                SettingsWindowController.shared.show(section: .ai)
+            }
+            view.onResize = { [weak self] in self?.needsLayout = true }
+            card.addSubview(view)
+            answer = view
+            glyph.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: metrics.glyph, weight: .semibold))
+        }
+        view.begin(question)
+        // What was asked and answered before this question, for the follow-up's context.
+        let history = view.turns
+        field.stringValue = ""
+        field.placeholderAttributedString = NSAttributedString(string: L("ai.ask.followUp"), attributes: [
+            .foregroundColor: NSColor.tertiaryLabelColor, .font: NSFont.systemFont(ofSize: metrics.fontSize),
+        ])
+        needsLayout = true
+        Trace.log("ask AI: \(question.count) characters, \(history.count) before")
+        answering = Task { @MainActor [weak view] in
+            do {
+                for try await piece in AIService.shared.stream(AskAI.request(question, after: history)) { view?.append(piece) }
+                view?.finish()
+            } catch is CancellationError {
+            } catch {
+                let failure = error as? AIError ?? .failed(error.localizedDescription)
+                Trace.log("ask AI failed: \(failure)")
+                view?.fail(failure)
+            }
+        }
+    }
+
+    private func endAnswer() {
+        answering?.cancel()
+        answering = nil
+        answer?.removeFromSuperview()
+        answer = nil
+    }
+
     // MARK: NSTextFieldDelegate
 
-    func controlTextDidChange(_ obj: Notification) { refresh() }
+    func controlTextDidChange(_ obj: Notification) {
+        // In a conversation the field takes the next question.
+        if answer == nil { refresh() }
+    }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
@@ -314,7 +401,16 @@ final class CommandBar: NSView, NSTextFieldDelegate {
             if !rows.isEmpty { select(min(selected + 1, rows.count - 1)) }
         case #selector(NSResponder.moveUp(_:)):
             if !rows.isEmpty { select(max(selected - 1, 0)) }
+        case #selector(NSResponder.insertTab(_:)):
+            // Tab asks the AI, when it's there to ask.
+            guard answer == nil, let index = suggestions.firstIndex(where: { if case .ask = $0 { true } else { false } }) else { return false }
+            run(index)
         case #selector(NSResponder.insertNewline(_:)):
+            if let answer {
+                let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty, !answer.isWriting { ask(text) }
+                return true
+            }
             if selected >= 0 { run(selected) } else if editing { hide() }
         case #selector(NSResponder.cancelOperation(_:)):
             hide()
@@ -371,6 +467,11 @@ private final class SuggestionRow: NSView {
             title.stringValue = query
             detail.stringValue = L("command.searchWith", URLInput.engine.name)
             hint.stringValue = L("command.search")
+        case let .ask(question):
+            icon.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
+            title.stringValue = question
+            detail.stringValue = L("ai.ask.detail")
+            hint.stringValue = L("ai.ask.hint")
         case let .tab(item, space):
             if let favicon { icon.image = favicon; usesSymbol = false } else {
                 icon.image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
@@ -455,3 +556,221 @@ final class KeyCap: NSView {
     }
 }
 
+
+/// The conversation with the AI in the command bar: a quiet header naming the model, then each question and its answer,
+/// the newest written in as it comes. Under it, small buttons: copy the answer, search the question instead, and, when
+/// the AI can't answer for a reason Settings fixes, the way there. A failure says why in plain words.
+private final class ChatView: NSView {
+    var onCopy: (() -> Void)?
+    var onSearch: (() -> Void)?
+    var onSettings: (() -> Void)?
+    /// The text grew: the bar sizes to it.
+    var onResize: (() -> Void)?
+
+    /// Questions answered, oldest first, for the follow-ups' context.
+    private(set) var turns: [(question: String, answer: String)] = []
+    private(set) var lastQuestion: String?
+    private var writing = ""
+    private var failure: AIError?
+    private(set) var isWriting = false
+    var lastAnswer: String { isWriting || !writing.isEmpty ? writing : turns.last?.answer ?? "" }
+
+    private let header = NSTextField(labelWithString: "")
+    private let headerIcon = NSImageView()
+    private let scroll = NSScrollView()
+    private let textView = NSTextView()
+    private let hint = NSTextField(labelWithString: L("ai.ask.keys"))
+    private let copyButton = ChatButton(symbol: "doc.on.doc", tip: L("ai.ask.copy"))
+    private let searchButton = ChatButton(symbol: "magnifyingglass", tip: L("command.searchWith", URLInput.engine.name))
+    private let settingsButton = ChatButton(symbol: "gearshape", tip: L("ai.settings.open"))
+    private static let headerHeight: CGFloat = 30
+    private static let footer: CGFloat = 34
+    private static let maxText: CGFloat = 380
+
+    init(model: String) {
+        super.init(frame: .zero)
+        headerIcon.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
+        headerIcon.contentTintColor = .systemPurple
+        header.stringValue = model.isEmpty ? L("ai.name") : "\(L("ai.name")) · \(model)"
+        header.font = .systemFont(ofSize: 11, weight: .medium)
+        header.textColor = .tertiaryLabelColor
+        header.lineBreakMode = .byTruncatingTail
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.textContainerInset = NSSize(width: 14, height: 4)
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        scroll.documentView = textView
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = .tertiaryLabelColor
+        hint.alignment = .right
+        [headerIcon, header, scroll, hint, copyButton, searchButton, settingsButton].forEach(addSubview)
+        copyButton.target = self
+        copyButton.action = #selector(copyTapped)
+        searchButton.target = self
+        searchButton.action = #selector(searchTapped)
+        settingsButton.target = self
+        settingsButton.action = #selector(settingsTapped)
+        copyButton.isHidden = true
+        settingsButton.isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// A new question: the last answer joins the conversation, and the new one is waited for.
+    func begin(_ question: String) {
+        if let lastQuestion, !writing.isEmpty, failure == nil { turns.append((lastQuestion, writing)) }
+        lastQuestion = question
+        writing = ""
+        failure = nil
+        isWriting = true
+        settingsButton.isHidden = true
+        copyButton.isHidden = true
+        redraw()
+    }
+
+    func append(_ piece: String) {
+        writing += piece
+        redraw()
+    }
+
+    func finish() {
+        isWriting = false
+        if writing.isEmpty { return fail(.unreadable) }
+        copyButton.isHidden = false
+        redraw()
+    }
+
+    func fail(_ error: AIError) {
+        isWriting = false
+        failure = error
+        settingsButton.isHidden = !error.needsSettings
+        copyButton.isHidden = writing.isEmpty
+        redraw()
+    }
+
+    private func redraw() {
+        let text = NSMutableAttributedString()
+        let question = NSMutableParagraphStyle()
+        question.paragraphSpacingBefore = 4
+        question.paragraphSpacing = 4
+        var all: [(String, String?)] = turns.map { ($0.question, $0.answer) }
+        if let lastQuestion { all.append((lastQuestion, nil)) }
+        for (index, turn) in all.enumerated() {
+            if index > 0 { text.append(NSAttributedString(string: "\n\n")) }
+            text.append(NSAttributedString(string: turn.0 + "\n", attributes: [
+                .font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: question,
+            ]))
+            if let answer = turn.1 {
+                text.append(Self.render(answer))
+                continue
+            }
+            // The question being answered: what's written so far, or a word that it's coming, and what went wrong.
+            if !writing.isEmpty {
+                text.append(Self.render(writing + (isWriting ? " ▍" : "")))
+            } else if failure == nil {
+                text.append(NSAttributedString(string: L("ai.ask.thinking"), attributes: [.font: NSFont.systemFont(ofSize: 14),
+                                                                                         .foregroundColor: NSColor.tertiaryLabelColor]))
+            }
+            if let failure {
+                text.append(NSAttributedString(string: (writing.isEmpty ? "" : "\n") + failure.message,
+                                               attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.systemOrange]))
+            }
+        }
+        textView.textStorage?.setAttributedString(text)
+        onResize?()
+        needsLayout = true
+        textView.scrollToEndOfDocument(nil)
+    }
+
+    /// As tall as the conversation (up to a point, then it scrolls), with the header and the buttons.
+    func height(forWidth width: CGFloat) -> CGFloat {
+        var body: CGFloat = 40
+        if let manager = textView.layoutManager, let container = textView.textContainer {
+            container.containerSize = NSSize(width: max(0, width - 28), height: .greatestFiniteMagnitude)
+            manager.ensureLayout(for: container)
+            body = min(Self.maxText, max(body, ceil(manager.usedRect(for: container).height) + 12))
+        }
+        return Self.headerHeight + body + Self.footer
+    }
+
+    override func layout() {
+        super.layout()
+        // Not flipped: the buttons at the bottom, the header at the top, the conversation between.
+        let width = bounds.width
+        headerIcon.frame = NSRect(x: 16, y: bounds.height - 22, width: 14, height: 14)
+        header.frame = NSRect(x: 36, y: bounds.height - 23, width: width - 52, height: 15)
+        scroll.frame = NSRect(x: 0, y: Self.footer, width: width, height: max(0, bounds.height - Self.headerHeight - Self.footer))
+        textView.frame.size.width = width
+        var x: CGFloat = 12
+        for button in [copyButton, searchButton, settingsButton] where !button.isHidden {
+            button.frame = NSRect(x: x, y: 6, width: 26, height: 24)
+            x += 28
+        }
+        hint.frame = NSRect(x: x + 8, y: 11, width: max(0, width - x - 24), height: 14)
+    }
+
+    @objc private func copyTapped() { onCopy?() }
+    @objc private func searchTapped() { onSearch?() }
+    @objc private func settingsTapped() { onSettings?() }
+
+    /// An answer's Markdown, the inline kind (bold, italics, code, links); lists and line breaks stay as written.
+    static func render(_ markdown: String) -> NSAttributedString {
+        let base = NSFont.systemFont(ofSize: 14)
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        let parsed = (try? NSAttributedString(markdown: markdown, options: options, baseURL: nil)) ?? NSAttributedString(string: markdown)
+        let result = NSMutableAttributedString(attributedString: parsed)
+        let whole = NSRange(location: 0, length: result.length)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 3
+        result.addAttributes([.font: base, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph], range: whole)
+        result.enumerateAttribute(.inlinePresentationIntent, in: whole) { value, range, _ in
+            guard let raw = (value as? NSNumber)?.uintValue ?? (value as? InlinePresentationIntent)?.rawValue else { return }
+            let intent = InlinePresentationIntent(rawValue: raw)
+            var font = intent.contains(.code) ? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) : base
+            if intent.contains(.stronglyEmphasized) { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
+            if intent.contains(.emphasized) { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
+            result.addAttribute(.font, value: font, range: range)
+        }
+        return result
+    }
+}
+
+/// A small borderless icon button under the AI's answer, lit while hovered.
+private final class ChatButton: NSButton {
+    private var hovering = false { didSet { needsDisplay = true } }
+
+    init(symbol: String, tip: String) {
+        super.init(frame: .zero)
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+        isBordered = false
+        imagePosition = .imageOnly
+        contentTintColor = .secondaryLabelColor
+        toolTip = tip
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if hovering {
+            Theme.hairline.setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
+        }
+        super.draw(dirtyRect)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+}

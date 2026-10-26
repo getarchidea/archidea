@@ -10,6 +10,20 @@ under *What's new*.
   stretching to the sidebar's width. A click opens one, a middle click unloads it, a drag reorders the tiles or takes
   one back to the list; its menu can send it back to the pinned tabs. Like a pinned tab, a favorite keeps its home
   address, and switching spaces leaves the tiles where they are.
+- AI, with your own key (Settings → AI). Pick a service and it comes filled in, its address and a cheap model:
+  Anthropic (Claude), OpenAI (ChatGPT), Google (Gemini), OpenRouter, Groq (Llama), Mistral, DeepSeek, or Ollama and
+  LM Studio running on your Mac. The model can be picked from the service's own list. Nothing AI shows until it's
+  connected, private windows never use it, and every feature can be turned off. Only what you ask for is sent.
+  - *Ask AI* in the address bar: type a question after ⌘T and press Tab. The answer is written right there, and you
+    can ask follow-ups in the same field. When the service can't answer (no credit, a wrong key, no connection) it
+    says so plainly, with the search a click away.
+  - *Rename with AI* in a tab's menu: a short name made of the page's title.
+  - *Tidy* next to Today's *Clear*: Today's tabs glow while the AI sorts them, then they're in folders by topic at
+    the top of Today.
+- Folders can be in Today too, not only among the pinned tabs: drag one down there, or pin and unpin it from its
+  menu. Its tabs are Today tabs (no home address to go back to); *Clear* and archiving leave a folder alone.
+- *Search … for “…”* in a page's menu uses the search engine you picked in Settings. It always searched
+  DuckDuckGo, the engine's own default.
 - Clicking into the address while editing it places the caret there. A click on the address bar opened over the
   sidebar closed it and opened it again with everything selected, so only the arrow keys moved the caret.
 

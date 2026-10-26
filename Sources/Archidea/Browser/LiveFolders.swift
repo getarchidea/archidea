@@ -25,7 +25,7 @@ final class LiveFolders {
     func refreshDue() {
         let due = Date().addingTimeInterval(-Self.interval)
         for space in state.spaces {
-            for folder in Self.liveFolders(in: space.pinned) where (folder.feed?.checked ?? .distantPast) < due { refresh(folder) }
+            for folder in Self.liveFolders(in: space.pinned + space.today) where (folder.feed?.checked ?? .distantPast) < due { refresh(folder) }
         }
     }
 

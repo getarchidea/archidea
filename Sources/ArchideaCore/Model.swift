@@ -141,9 +141,9 @@ public final class SidebarItem: Codable {
         return index > 0 ? children[index - 1] : nil
     }
 
-    /// A tab among the pins keeps the address it was pinned at, to go back to; a pinned split's tabs all do.
+    /// A tab among the pins keeps the address it was pinned at, to go back to; a pinned split's or folder's tabs all do.
     fileprivate func keepHome() {
-        if isSplit { children.forEach { $0.keepHome() } }
+        if !isTab { children.forEach { $0.keepHome() } }
         if isTab, pinnedURL == nil { pinnedURL = url }
     }
 }
@@ -215,8 +215,7 @@ public final class Space: Codable {
 
     /// Whether the item (or the split it's one side of) is among the pins (or the favourites) rather than in Today.
     public func isPinned(_ item: SidebarItem) -> Bool {
-        let row = row(of: item)
-        return !today.contains { $0 === row }
+        location(of: row(of: item))?.inToday != true
     }
 
     /// The array (by parent) holding the item: nil parent with `inToday` tells pinned root from today. A split's tab
@@ -232,7 +231,7 @@ public final class Space: Codable {
             }
             return nil
         }
-        for root in today where root.isSplit {
+        for root in today where !root.isTab {
             if let (parent, index) = search(root) { return (parent, true, index) }
         }
         for root in pinned where !root.isTab {
@@ -335,22 +334,19 @@ public final class Space: Codable {
     }
 
     /// Puts an item that is in no list into `slot` at `index` (clamped). What each list may hold is kept here and
-    /// nowhere else: folders live among the pins (one meant for Today joins the end of the pins), a pinned tab has a
-    /// home address, a Today tab has none.
+    /// nowhere else: anything (tabs, splits, folders) goes in either list; a tab among the pins, or in a folder there,
+    /// has a home address, one in Today (in a folder there too) has none.
     public func place(_ item: SidebarItem, in slot: Slot, at index: Int) {
         func clamped(_ count: Int) -> Int { min(max(index, 0), count) }
         switch slot {
-        case .today where item.isFolder:
-            pinned.append(item)
         case .today:
-            // A tab, or a split's two tabs.
             item.allTabs.forEach { $0.pinnedURL = nil }
             today.insert(item, at: clamped(today.count))
         case .pinned:
             item.keepHome()
             pinned.insert(item, at: clamped(pinned.count))
         case let .folder(folder):
-            item.keepHome()
+            if location(of: folder)?.inToday == true { item.allTabs.forEach { $0.pinnedURL = nil } } else { item.keepHome() }
             folder.children.insert(item, at: clamped(folder.children.count))
             folder.expanded = true
         }
@@ -498,19 +494,13 @@ public final class AppState: Codable {
         spaces.first { $0.find(item.id) === item }
     }
 
-    /// Puts right what an older version (or a bug) may have saved: a folder in Today goes back among the pins, a
-    /// split holds two to four tabs, a pinned tab gets its home address, a Today tab loses one, every window shows a space
-    /// that exists and there is a window. Returns whether anything changed.
+    /// Puts right what an older version (or a bug) may have saved: a split holds two to four tabs, a pinned tab gets
+    /// its home address, a Today tab (in a folder there too) loses one, every window shows a space that exists and
+    /// there is a window. Returns whether anything changed.
     @discardableResult
     public func repair() -> Bool {
         var changed = false
         for space in spaces {
-            let strays = space.today.filter(\.isFolder)
-            if !strays.isEmpty {
-                space.today.removeAll { $0.isFolder }
-                space.pinned += strays
-                changed = true
-            }
             // A split holds two to four tabs of its own. One holding anything else gives way to the tabs in it.
             func splits(_ items: [SidebarItem]) -> [SidebarItem] {
                 items.flatMap { $0.isSplit ? [$0] : $0.isFolder ? splits($0.children) : [] }
@@ -623,6 +613,8 @@ public struct BrowserSettings: Codable, Equatable {
     public var hideCookieBanners = true
     /// Where links from other apps open: a mini window of their own, or a tab in the browser window.
     public var linksInMiniWindow = true
+    /// The AI features and the service behind them; the key itself is kept apart, never in this file.
+    public var ai = AISettings()
 
     public init() {}
 
@@ -637,6 +629,7 @@ public struct BrowserSettings: Codable, Equatable {
         adBlock = (try? c.decodeIfPresent(Bool.self, forKey: .adBlock)) ?? defaults.adBlock
         hideCookieBanners = (try? c.decodeIfPresent(Bool.self, forKey: .hideCookieBanners)) ?? defaults.hideCookieBanners
         linksInMiniWindow = (try? c.decodeIfPresent(Bool.self, forKey: .linksInMiniWindow)) ?? defaults.linksInMiniWindow
+        ai = (try? c.decodeIfPresent(AISettings.self, forKey: .ai)) ?? defaults.ai
     }
 }
 

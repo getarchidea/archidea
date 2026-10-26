@@ -579,39 +579,55 @@ final class SoundButton: ChromeButton {
 
 final class DividerCell: NSTableCellView {
     var onClear: (() -> Void)?
+    /// Tidy: the AI sorts Today into folders (shown only while it's connected).
+    var onTidy: (() -> Void)?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        return hit === clear ? hit : nil
+        return hit === clear || hit === tidy ? hit : nil
     }
     var showsClear = false { didSet { clear.isHidden = !showsClear } }
+    var showsTidy = false { didSet { tidy.isHidden = !showsTidy } }
     var clearTip: String? { didSet { clear.toolTip = clearTip } }
     private let clear = FirstMouseButton(title: L("today.clear"), target: nil, action: nil)
+    private let tidy = FirstMouseButton(title: L("ai.tidy.button"), target: nil, action: nil)
     private let line = NSView()
 
     init() {
         super.init(frame: .zero)
         line.wantsLayer = true
         addSubview(line)
-        clear.isBordered = false
-        clear.font = .systemFont(ofSize: 11, weight: .medium)
-        clear.contentTintColor = .tertiaryLabelColor
-        clear.target = self
-        clear.action = #selector(clearTapped)
-        addSubview(clear)
+        for (button, action) in [(clear, #selector(clearTapped)), (tidy, #selector(tidyTapped))] {
+            button.isBordered = false
+            button.font = .systemFont(ofSize: 11, weight: .medium)
+            button.contentTintColor = .tertiaryLabelColor
+            button.target = self
+            button.action = action
+            addSubview(button)
+        }
+        tidy.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
+        tidy.imagePosition = .imageLeading
+        tidy.toolTip = L("ai.tidy.tip")
+        tidy.isHidden = true
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override func layout() {
         super.layout()
-        let width = clear.isHidden ? 0 : clear.intrinsicContentSize.width + 8
-        line.frame = NSRect(x: 20, y: bounds.midY, width: bounds.width - 40 - width, height: 1)
+        var right = bounds.width - 20
+        for button in [clear, tidy] where !button.isHidden {
+            let width = button.intrinsicContentSize.width
+            button.frame = NSRect(x: right - width, y: (bounds.height - 16) / 2, width: width, height: 16)
+            right -= width + 10
+        }
+        line.frame = NSRect(x: 20, y: bounds.midY, width: max(0, right - 20), height: 1)
         line.layer?.backgroundColor = Theme.hairline.cgColor
-        clear.frame = NSRect(x: bounds.width - 20 - width + 8, y: (bounds.height - 16) / 2, width: width - 8, height: 16)
     }
 
     @objc private func clearTapped() { onClear?() }
+    @objc private func tidyTapped() { onTidy?() }
 }
 
 final class FirstMouseButton: NSButton {
@@ -737,5 +753,49 @@ final class DropIndicator {
     func hide() {
         line.isHidden = true
         group.isHidden = true
+    }
+}
+
+/// The light that runs over rows while the AI works on them: a soft band of colour sweeping across, again and again,
+/// until `stop()` fades it out.
+final class AIGlow: NSView {
+    private let sweep = CAGradientLayer()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = true
+        let colors: [NSColor] = [.clear, .systemPurple, .systemBlue, .systemPink, .clear]
+        sweep.colors = colors.map { $0.withAlphaComponent($0 == .clear ? 0 : 0.22).cgColor }
+        sweep.startPoint = CGPoint(x: 0, y: 0.5)
+        sweep.endPoint = CGPoint(x: 1, y: 0.5)
+        sweep.locations = [-0.8, -0.6, -0.4, -0.2, 0]
+        layer?.addSublayer(sweep)
+        let move = CABasicAnimation(keyPath: "locations")
+        move.fromValue = [-0.8, -0.6, -0.4, -0.2, 0]
+        move.toValue = [1.0, 1.2, 1.4, 1.6, 1.8]
+        move.duration = 1.4
+        move.repeatCount = .infinity
+        move.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        sweep.add(move, forKey: "sweep")
+        alphaValue = 0
+        NSAnimationContext.runAnimationGroup { $0.duration = 0.2; self.animator().alphaValue = 1 }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        sweep.frame = bounds
+    }
+
+    func stop() {
+        NSAnimationContext.runAnimationGroup({ $0.duration = 0.25; self.animator().alphaValue = 0 }, completionHandler: { [weak self] in
+            self?.removeFromSuperview()
+        })
     }
 }

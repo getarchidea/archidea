@@ -11,14 +11,26 @@ final class ModelTests: XCTestCase {
 
     // MARK: what each list may hold
 
-    func testFolderSentToTodayStaysAmongThePins() {
+    func testAFolderGoesToTodayAndBackWithItsTabs() {
         let space = makeSpace()
         let folder = SidebarItem(folder: "Reading")
-        folder.children = [SidebarItem(tab: "https://a.example")]
+        let tab = SidebarItem(tab: "https://a.example")
         space.pinned = [SidebarItem(tab: "https://b.example"), folder]
+        space.move(tab, to: .folder(folder), at: 0)
+        XCTAssertEqual(tab.pinnedURL, "https://a.example")
         space.move(folder, to: .today, at: 0)
-        XCTAssertTrue(space.today.isEmpty)
-        XCTAssertTrue(space.pinned.last === folder)
+        XCTAssertTrue(space.today.first === folder)
+        XCTAssertEqual(space.pinned.count, 1)
+        XCTAssertNil(tab.pinnedURL, "a folder in Today holds Today tabs")
+        XCTAssertFalse(space.isPinned(tab))
+        XCTAssertTrue(space.location(of: tab)?.inToday == true)
+        let another = SidebarItem(tab: "https://c.example")
+        space.today.append(another)
+        space.move(another, to: .folder(folder), at: 1)
+        XCTAssertNil(another.pinnedURL)
+        space.move(folder, to: .pinned, at: 0)
+        XCTAssertEqual(folder.children.map(\.pinnedURL), ["https://a.example", "https://c.example"])
+        XCTAssertTrue(space.isPinned(tab))
     }
 
     func testPinningKeepsTheHomeAddressAndTodayDropsIt() {
@@ -67,8 +79,7 @@ final class ModelTests: XCTestCase {
         space.today = [folder, stale]
         state.windows[0].spaceID = UUID()
         XCTAssertTrue(state.repair())
-        XCTAssertEqual(space.today.count, 1)
-        XCTAssertTrue(space.pinned.contains { $0 === folder })
+        XCTAssertEqual(space.today.count, 2, "a folder may be in Today")
         XCTAssertEqual(homeless.pinnedURL, "https://pinned.example")
         XCTAssertNil(stale.pinnedURL)
         XCTAssertEqual(state.windows[0].spaceID, space.id)
