@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-26
+
 - Swiping between spaces pages like Dia: the next space's list comes in beside the current one as your fingers
   move, and on letting go it slides the rest of the way. Before, the list faded out, and the next one jumped in
   after it.
