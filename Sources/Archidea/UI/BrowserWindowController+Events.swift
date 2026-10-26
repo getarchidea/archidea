@@ -41,7 +41,7 @@ extension BrowserWindowController {
     func runtime(_ runtime: TabRuntime, adopt tab: ArdiaCoreTab, opener: ArdiaCoreTab?, foreground: Bool) {
         let item = SidebarItem(tab: tab.url, title: tab.title)
         let from = opener.flatMap { runtime.item(for: $0) }
-        let owner = from.flatMap { state.space(containing: $0) } ?? space
+        let owner = from.flatMap { self.owner(of: $0) } ?? space
         let index = from.flatMap { source in owner.today.firstIndex { $0 === owner.row(of: source) } } ?? 0
         owner.today.insert(item, at: index)
         runtime.bind(tab, to: item)
@@ -65,7 +65,7 @@ extension BrowserWindowController {
     }
 
     func runtime(_ runtime: TabRuntime, tabDidClose item: SidebarItem) {
-        guard let owner = state.space(containing: item) else { return }
+        guard let owner = self.owner(of: item) else { return }
         let wasActive = owner === space && item === activeItem
         // A Today split's page closing leaves the one beside it in front.
         let otherSide = owner.isPinned(item) ? nil : owner.split(containing: item)?.nextPane(after: item)

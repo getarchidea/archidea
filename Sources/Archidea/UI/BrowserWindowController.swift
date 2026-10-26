@@ -483,7 +483,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
         }
         if live != nil { unloadHere(item) }
         guard inFront else { return }
-        if let owner = state.space(containing: item) { windowState.select(nil, in: owner) }
+        if let owner = self.owner(of: item) { windowState.select(nil, in: owner) }
         show(nil)
     }
 
@@ -527,13 +527,16 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     // MARK: selection
 
+    /// The space `item` belongs to for this window: a favourite, which every space shows, belongs to the one shown here.
+    func owner(of item: SidebarItem) -> Space? { space.isFavorite(item) ? space : state.space(containing: item) }
+
     func select(_ item: SidebarItem, focusPage: Bool = true, cause: String = "unspecified") {
         // A split's row: the side this window last had the keyboard in, else the left one.
         if item.isSplit, let side = item.children.first(where: { $0.id == lastSide[item.id] }) ?? item.children.first {
             return select(side, focusPage: focusPage, cause: cause)
         }
         Trace.log("activate \(item.traceName) cause=\(cause) was=\(activeItem?.traceName ?? "-")")
-        if let owner = state.space(containing: item), owner !== space {
+        if let owner = self.owner(of: item), owner !== space {
             windowState.spaceID = owner.id
             applySpace(selecting: false)
         }
@@ -1018,12 +1021,29 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
 
     func togglePin(_ item: SidebarItem) {
-        guard let owner = state.space(containing: item) else { return }
+        guard let owner = self.owner(of: item) else { return }
         let pinning = !owner.isPinned(item)
         owner.remove(item)
         if pinning { owner.place(item, in: .pinned, at: owner.pinned.count) } else { owner.place(item, in: .today, at: 0) }
         reloadSidebar()
         sidebar.reflectSelection()
+        store.setNeedsSave()
+    }
+
+    /// Makes `item` a favourite, at `index` among them (nil: the last), or moves one that is. Only a tab of its own
+    /// is one: a split's side or a folder isn't.
+    func favorite(_ item: SidebarItem, at index: Int? = nil) {
+        guard item.isTab, let owner = self.owner(of: item), owner.split(containing: item) == nil else { return }
+        owner.move(item, to: .folder(owner.favorites), at: index ?? owner.favorites.children.count)
+        reloadSidebar()
+        store.setNeedsSave()
+    }
+
+    /// A favourite goes back among this space's pins, at their top.
+    func unfavorite(_ item: SidebarItem) {
+        guard space.isFavorite(item) else { return }
+        space.move(item, to: .pinned, at: 0)
+        reloadSidebar()
         store.setNeedsSave()
     }
 
@@ -1249,7 +1269,8 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// A space goes with everything in it, so one that holds tabs asks first.
     func delete(_ target: Space) {
         guard state.spaces.count > 1 else { return }
-        let count = target.allTabs.count
+        // The favourites stay: every space shows them.
+        let count = target.ownTabs.count
         guard count > 0 else { return deleteNow(target) }
         confirm(host: target.name, icon: Glyphs.image(target.symbol, filled: true, pointSize: 15),
                 title: L("space.delete.title", target.name), detail: L("space.delete.detail", plural("count.tabs", count)),
@@ -1258,7 +1279,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
 
     private func deleteNow(_ target: Space) {
         guard state.spaces.count > 1, state.spaces.contains(where: { $0 === target }) else { return }
-        for item in target.allTabs { group.unload(item) }
+        for item in target.ownTabs { group.unload(item) }
         let shown = target === space
         // Windows that showed it (this one, others) show the first space left.
         state.removeSpace(target)
@@ -1270,7 +1291,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// To another space: a pin (or a folder, with everything in it) to the end of its pins, a Today tab to the top
     /// of its Today.
     func move(_ item: SidebarItem, to target: Space) {
-        guard let from = state.space(containing: item), from !== target else { return }
+        guard let from = owner(of: item), from !== target else { return }
         // The tab in front may be the item, or inside the folder that goes.
         let wasActive = from === space && activeItem.map { from.contains(item, descendant: $0) } == true
         let pinned = from.isPinned(item)

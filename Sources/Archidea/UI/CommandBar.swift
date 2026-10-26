@@ -265,7 +265,8 @@ final class CommandBar: NSView, NSTextFieldDelegate {
         let active = controller.activeItem
         var found: [(SidebarItem, Space)] = []
         for space in controller.state.spaces {
-            for item in space.allTabs where item !== active {
+            // The favourites, which every space shows, are listed once: as this space's.
+            for item in space === controller.space ? space.allTabs : space.ownTabs where item !== active {
                 if query.isEmpty ? space === controller.space
                     : item.displayTitle.lowercased().contains(query) || item.url.lowercased().contains(query) {
                     found.append((item, space))
