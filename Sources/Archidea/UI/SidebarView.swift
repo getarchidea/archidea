@@ -306,49 +306,100 @@ final class SidebarView: NSView, WindowDragSurface {
     /// layout of the sidebar on every scroll event (on the main thread, which the engine shares) made the swipe lag.
     private var swipeLayers: [CALayer] { ([header, scroll] as [NSView]).compactMap(\.layer) }
 
-    /// Puts the header and list `offset` points to the side, fading as they go, at once.
-    func followSwipe(_ offset: CGFloat) {
+    /// The neighbouring space's header and list during a swipe, beside the current ones on the side it comes from
+    /// (`side` −1: the left, the previous space; 1: the right, the next), so the two move together like pages.
+    private struct Peek {
+        let space: Space
+        let side: CGFloat
+        let header: SpaceHeader
+        let list: SidebarList
+        var layers: [CALayer] { ([header, list.scroll] as [NSView]).compactMap(\.layer) }
+    }
+    private var peek: Peek?
+
+    /// Shows `neighbour` beside the current space, on the side a swipe by `offset` brings it from; nil takes it away.
+    private func preparePeek(_ neighbour: Space?, offset: CGFloat) {
+        let side: CGFloat = offset > 0 ? -1 : 1
+        if let peek, peek.space === neighbour, peek.side == side { return }
+        removePeek()
+        guard let neighbour, offset != 0 else { return }
+        // Its own view of the sidebar: that space, with the tab this window had in front there.
+        let view = WindowState(spaceID: neighbour.id)
+        view.select(windowState.selectedID(in: neighbour), in: neighbour)
+        let list = SidebarList(store: store, window: view)
+        list.delegate = delegate
+        let head = SpaceHeader()
+        head.show(neighbour)
+        for (shown, beside) in [(head, header), (list.scroll, scroll)] as [(NSView, NSView)] {
+            shown.wantsLayer = true
+            shown.frame = beside.frame
+            slideClip.addSubview(shown)
+        }
+        list.reload()
+        list.didLayout()
+        peek = Peek(space: neighbour, side: side, header: head, list: list)
+    }
+
+    private func removePeek() {
+        peek?.header.removeFromSuperview()
+        peek?.list.scroll.removeFromSuperview()
+        peek = nil
+    }
+
+    /// Puts the header and list `offset` points to the side, at once, and `neighbour`'s beside them.
+    func followSwipe(_ offset: CGFloat, toward neighbour: Space?) {
+        preparePeek(neighbour, offset: offset)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for layer in swipeLayers {
             layer.removeAnimation(forKey: "swipe")
             place(layer, at: offset)
         }
-        CATransaction.commit()
-    }
-
-    /// Eases the header and list from where they are to `offset`: back to rest, or out of view before the next space.
-    func settleSwipe(at offset: CGFloat, duration: TimeInterval, then done: (() -> Void)? = nil) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        CATransaction.setCompletionBlock(done)
-        for layer in swipeLayers {
-            let shown = layer.presentation() ?? layer
-            let move = CABasicAnimation(keyPath: "transform")
-            move.fromValue = NSValue(caTransform3D: shown.transform)
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = shown.opacity
-            place(layer, at: offset)
-            move.toValue = NSValue(caTransform3D: layer.transform)
-            fade.toValue = layer.opacity
-            let group = CAAnimationGroup()
-            group.animations = [move, fade]
-            group.duration = duration
-            group.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
-            layer.add(group, forKey: "swipe")
+        if let peek {
+            for layer in peek.layers { place(layer, at: offset + peek.side * bounds.width) }
         }
         CATransaction.commit()
     }
 
-    /// The next space's header and list come in from `offset`, the side the last ones left from, to rest.
-    func swipeIn(from offset: CGFloat, duration: TimeInterval) {
-        followSwipe(offset)
-        settleSwipe(at: 0, duration: duration)
+    /// Eases the header and list (and the neighbour's beside them) from where they are to `offset`: back to rest, or
+    /// all the way over, where the neighbour is in their place. `done` runs once they're there.
+    func settleSwipe(at offset: CGFloat, duration: TimeInterval, then done: (() -> Void)? = nil) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock(done)
+        let moves = swipeLayers.map { ($0, offset) } + (peek.map { peek in peek.layers.map { ($0, offset + peek.side * bounds.width) } } ?? [])
+        for (layer, to) in moves {
+            let shown = layer.presentation() ?? layer
+            let move = CABasicAnimation(keyPath: "transform")
+            move.fromValue = NSValue(caTransform3D: shown.transform)
+            place(layer, at: to)
+            move.toValue = NSValue(caTransform3D: layer.transform)
+            move.duration = duration
+            move.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+            layer.add(move, forKey: "swipe")
+        }
+        CATransaction.commit()
+    }
+
+    /// The swipe is over: the list is back at rest (showing the space it arrived at, if it did, from the top, as its
+    /// neighbour did) and the neighbour's goes.
+    func endSwipe(arrived: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for layer in swipeLayers {
+            layer.removeAnimation(forKey: "swipe")
+            place(layer, at: 0)
+        }
+        if arrived {
+            scroll.contentView.scroll(to: .zero)
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+        removePeek()
+        CATransaction.commit()
     }
 
     private func place(_ layer: CALayer, at offset: CGFloat) {
         layer.setAffineTransform(offset == 0 ? .identity : CGAffineTransform(translationX: offset, y: 0))
-        layer.opacity = Float(1 - min(0.6, abs(offset) / max(bounds.width, 1)))
     }
 
     /// A downloaded update waiting for a restart, offered above the space bar; nil hides it.

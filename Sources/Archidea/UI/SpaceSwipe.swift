@@ -1,8 +1,8 @@
 import AppKit
 import ArchideaCore
 
-/// Two fingers across the sidebar page between spaces, as in Arc: the list follows the fingers (with a rubber band
-/// past the first and last space), and on letting go it either carries on to the neighbour — when pulled a quarter
+/// Two fingers across the sidebar page between spaces, as in Arc and Dia: the list follows the fingers with the next
+/// space's beside it, coming in as the current one goes (a rubber band past the first and last space), and on letting go it either carries on to the neighbour — when pulled a quarter
 /// of the way or flicked — or springs back. The momentum after the fingers lift is swallowed. The first clear
 /// movement decides the gesture: up or down scrolls the list to the end, sideways pages. Docked or slid out over the
 /// page, the sidebar is the same.
@@ -57,7 +57,8 @@ final class SpaceSwipe {
             offset += event.scrollingDeltaX
             velocity = event.scrollingDeltaX
             let width = sidebar.bounds.width
-            sidebar.followSwipe(neighbour(offset) != nil ? max(-width, min(width, offset)) : offset / 3)
+            let next = neighbour(offset)
+            sidebar.followSwipe(next != nil ? max(-width, min(width, offset)) : offset / 3, toward: next)
             return true
         case .ended, .cancelled:
             scrolling = false
@@ -69,16 +70,15 @@ final class SpaceSwipe {
             if event.phase == .ended, let next = neighbour(offset), abs(offset) > width * 0.25 || flick {
                 Trace.log("swipe: on to the next space (\(Int(abs(offset))) of \(Int(width)) pt\(flick ? ", flicked" : ""))")
                 let outward: CGFloat = offset > 0 ? width : -width
-                sidebar.settleSwipe(at: outward, duration: 0.14) { [weak self] in
+                sidebar.settleSwipe(at: outward, duration: 0.24) { [weak self] in
                     guard let self else { return }
-                    // The space changes while its list is out of view, and the next one comes in from the other side:
-                    // one movement, not the list coming back and sliding away again.
+                    // The neighbour is in place: the list takes its space and comes back where it stands, in one frame.
                     arrive(next)
-                    sidebar.swipeIn(from: -outward * 0.4, duration: 0.24)
+                    sidebar.endSwipe(arrived: true)
                 }
             } else {
                 Trace.log("swipe: back (\(Int(abs(offset))) of \(Int(width)) pt, \(neighbour(offset) == nil ? "no space that way" : "not far enough"))")
-                sidebar.settleSwipe(at: 0, duration: 0.28)
+                sidebar.settleSwipe(at: 0, duration: 0.28) { [weak self] in self?.sidebar.endSwipe(arrived: false) }
             }
             offset = 0
             return true
