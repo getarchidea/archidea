@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-26
+
 - Dragging a tab no longer pushes the whole list down to make room for Favorites. With no favorites yet, the
   spot to drop one shows over the space's name only when a tab is dragged there.
 
