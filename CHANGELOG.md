@@ -5,6 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
+- *Search … for “…”* in a page's menu uses the search engine you picked in Settings. It always searched
+  DuckDuckGo, the engine's own default.
 - Clicking into the address while editing it places the caret there. A click on the address bar opened over the
   sidebar closed it and opened it again with everything selected, so only the arrow keys moved the caret.
 

@@ -457,3 +457,4 @@
 "site.cookieBanners" = "Hide Cookie Banners";
 "onboarding.cookieBanners.title" = "Hide cookie banners";
 "onboarding.cookieBanners.text" = "Cookie pop-ups answered with “reject all”, or hidden. Switch it off any time in Settings.";
+"context.search" = "Search %@ for “%@”";

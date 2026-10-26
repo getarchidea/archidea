@@ -26,6 +26,8 @@ protocol TabRuntimeDelegate: AnyObject {
     func runtime(_ runtime: TabRuntime, tabNeedsActivation tab: ArdiaCoreTab)
     func runtime(_ runtime: TabRuntime, tabGainedFocus tab: ArdiaCoreTab)
     func runtime(_ runtime: TabRuntime, loadingOf tab: ArdiaCoreTab)
+    /// The page's menu asked to search for the selected text.
+    func runtime(_ runtime: TabRuntime, tab: ArdiaCoreTab, searchFor text: String)
 }
 
 /// Owns the live Chrome tabs. A sidebar item gets a tab only when it is opened.
@@ -201,6 +203,21 @@ final class TabRuntime: NSObject, ArdiaCoreTabDelegate {
     @objc(tab:externalAppRequest:)
     func tab(_ tab: ArdiaCoreTab, externalAppRequest request: [String: Any]) {
         delegate?.runtime(self, tab: tab, asksToOpenApp: request)
+    }
+
+    // MARK: the page's menu
+
+    /// Chrome's own "Search … for" uses the engine profile's search engine (DuckDuckGo), not the one Settings picks:
+    /// ours takes its place.
+    @objc(tab:contextMenuItemsForSelection:)
+    func tab(_ tab: ArdiaCoreTab, contextMenuItemsForSelection text: String) -> [[String: String]] {
+        [["id": "search", "title": L("context.search", URLInput.engine.name, URLInput.selectionLabel(text)), "replaces": "search"]]
+    }
+
+    @objc(tab:contextMenuCommand:text:modifiers:)
+    func tab(_ tab: ArdiaCoreTab, contextMenuCommand itemId: String, text selection: String, modifiers: [String: NSNumber]) {
+        guard itemId == "search", !selection.isEmpty else { return }
+        delegate?.runtime(self, tab: tab, searchFor: selection)
     }
 
     /// A tab opened only to fetch a file (a link to a download, opened in a new tab) has nothing to show once the
