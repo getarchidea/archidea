@@ -20,8 +20,20 @@ public enum URLInput {
                 return "https://\(input)"
             }
         }
+        return search(input)
+    }
+
+    /// The search engine's page for `text`, whatever it looks like (an address too).
+    public static func search(_ text: String) -> String {
+        let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let query = input.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? input
         return searchTemplate.replacingOccurrences(of: "%@", with: query)
+    }
+
+    /// Selected text as a menu names it: on one line, its runs of spaces as one, cut short after `limit` characters.
+    public static func selectionLabel(_ text: String, limit: Int = 32) -> String {
+        let line = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return line.count > limit ? String(line.prefix(limit - 1)) + "…" : line
     }
 
     public static func isSearch(_ input: String) -> Bool {

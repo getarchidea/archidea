@@ -37,4 +37,12 @@ final class URLInputTests: XCTestCase {
     func testNothingTypedIsABlankPage() {
         XCTAssertEqual(URLInput.resolve("   "), "about:blank")
     }
+
+    func testASelectionIsSearchedAsItIsAndNamedOnOneLine() {
+        URLInput.engine = .google
+        XCTAssertEqual(URLInput.search("apple.com"), "https://www.google.com/search?q=apple.com")
+        XCTAssertEqual(URLInput.search(" a & b "), "https://www.google.com/search?q=a%20%26%20b")
+        XCTAssertEqual(URLInput.selectionLabel("one\n  two\tthree"), "one two three")
+        XCTAssertEqual(URLInput.selectionLabel(String(repeating: "x", count: 40), limit: 10), "xxxxxxxxx…")
+    }
 }
