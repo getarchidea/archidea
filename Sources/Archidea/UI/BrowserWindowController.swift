@@ -301,8 +301,9 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
                 + "on \(WindowDrag.probe(event.locationInWindow, in: window))")
             guard event.type == .leftMouseDown else { return event }
             if commandBar.isOpen {
-                // The bar sits over the whole window; a press in the sidebar closes it and goes on to the sidebar.
-                if sidebarTakesPress(at: event.locationInWindow) { commandBar.hide() }
+                // The bar sits over the whole window; a press in the sidebar closes it and goes on to the sidebar. Not a
+                // press on the bar itself, which edits the address right over the sidebar: that one places the caret.
+                if sidebarTakesPress(at: event.locationInWindow), !commandBar.cardContains(event.locationInWindow) { commandBar.hide() }
                 return event
             }
             if overlayShown, !sidebar.frame.insetBy(dx: -6, dy: 0).contains(root.convert(event.locationInWindow, from: nil)) { setOverlay(false) }
