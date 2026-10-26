@@ -152,7 +152,12 @@ final class CommandBar: NSView, NSTextFieldDelegate {
     }
 
     override func mouseDown(with event: NSEvent) {
-        if !shadowHost.frame.contains(convert(event.locationInWindow, from: nil)) { hide() }
+        if !cardContains(event.locationInWindow) { hide() }
+    }
+
+    /// Whether a point in the window is on the bar's card (its field and suggestions), not on what's around it.
+    func cardContains(_ windowPoint: NSPoint) -> Bool {
+        isOpen && shadowHost.frame.contains(convert(windowPoint, from: nil))
     }
 
     /// Outside the card the sidebar stays reachable: its presses go straight to it.

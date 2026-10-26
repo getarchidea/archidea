@@ -5,6 +5,9 @@ under *What's new*.
 
 ## [Unreleased]
 
+- Clicking into the address while editing it places the caret there. A click on the address bar opened over the
+  sidebar closed it and opened it again with everything selected, so only the arrow keys moved the caret.
+
 ## [0.4.2] - 2026-10-25
 
 - A tab you've had in front for a while is no longer unloaded the minute you switch away from it: its half hour (or
