@@ -102,7 +102,7 @@ final class SidebarView: NSView, WindowDragSurface {
     private var space: Space { store.state.space(shownIn: windowState) }
     /// The pins and Today.
     let list: SidebarList
-    /// The favourites, above the list. Every space shows them, so a swipe to another space leaves them where they are.
+    /// The favourites, above the space's name. Every space shows them, so a swipe to another space leaves them where they are.
     private let favorites = FavoritesGrid()
     private var outline: SidebarOutline { list.outline }
     private var scroll: ThinScrollView { list.scroll }
@@ -210,6 +210,10 @@ final class SidebarView: NSView, WindowDragSurface {
         favorites.onResize = { [weak self] in self?.favoritesResized() }
         slideClip.addSubview(favorites)
         list.onDrag = { [weak self] dragging in self?.favorites.dragging = dragging }
+        list.onMove = { [weak self] in
+            guard let self else { return }
+            favorites.show(space, selected: windowState.selectedID(in: space))
+        }
 
         list.emptyAreaMenu = { [weak self] in
             guard let self else { return NSMenu() }
@@ -253,10 +257,12 @@ final class SidebarView: NSView, WindowDragSurface {
 
         let top = TrafficLights.centerY - origin + 20
         address.frame = NSRect(x: 12, y: top, width: width - 24, height: 38)
-        header.frame = NSRect(x: 12, y: top + 48, width: width - 24, height: 28)
+        // The favourites belong to no space: above the space's name, which goes with its list.
         let grid = favorites.contentHeight
-        favorites.frame = NSRect(x: 12, y: top + 80, width: width - 24, height: grid)
-        let listTop = top + 80 + (grid > 0 ? grid + 8 : 0)
+        favorites.frame = NSRect(x: 12, y: top + 48, width: width - 24, height: grid)
+        let headerTop = top + 48 + (grid > 0 ? grid + 8 : 0)
+        header.frame = NSRect(x: 12, y: headerTop, width: width - 24, height: 28)
+        let listTop = headerTop + 32
         let banner: CGFloat = updateVersion == nil ? 0 : 58
         scroll.frame = NSRect(x: 0, y: listTop, width: width, height: max(0, height - listTop - 48 - banner))
         updateBanner.frame = NSRect(x: 10, y: height - 48 - banner + 4, width: width - 20, height: max(0, banner - 8))

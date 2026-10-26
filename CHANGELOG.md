@@ -5,8 +5,8 @@ under *What's new*.
 
 ## [Unreleased]
 
-- Favorites: tabs as tiles above the pinned ones, the same in every space, as in Arc. Drag a tab onto the top of the
-  list (while you drag, an empty spot shows where), or choose *Add to Favorites* in its menu. Three to a row, each row
+- Favorites: tabs as tiles above the space's name, the same in every space, as in Arc. Drag a tab up there (while
+  you drag, an empty spot shows where), or choose *Add to Favorites* in its menu. Three to a row, each row
   stretching to the sidebar's width. A click opens one, a middle click unloads it, a drag reorders the tiles or takes
   one back to the list; its menu can send it back to the pinned tabs. Like a pinned tab, a favorite keeps its home
   address, and switching spaces leaves the tiles where they are.

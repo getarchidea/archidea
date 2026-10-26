@@ -12,6 +12,8 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     var emptyAreaMenu: (() -> NSMenu)?
     /// A row's drag began (true) or ended: the favourites make room to take it.
     var onDrag: ((Bool) -> Void)?
+    /// An item moved by a drop (onto the list, the header): it may have left the favourites, which show it again.
+    var onMove: (() -> Void)?
 
     let outline = SidebarOutline()
     let scroll = SidebarScroll()
@@ -457,6 +459,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if case let .folder(folder) = container, space.contains(moving, descendant: folder) { return false }
         space.move(moving, to: container, at: index)
         reload()
+        onMove?()
         delegate?.sidebarChanged()
         return true
     }
