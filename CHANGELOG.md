@@ -13,8 +13,10 @@ under *What's new*.
     can ask follow-ups in the same field. When the service can't answer (no credit, a wrong key, no connection) it
     says so plainly, with the search a click away.
   - *Rename with AI* in a tab's menu: a short name made of the page's title.
-  - *Tidy* next to Today's *Clear*: Today's tabs glow while the AI sorts them, then they're in folders by topic among
-    the pinned tabs.
+  - *Tidy* next to Today's *Clear*: Today's tabs glow while the AI sorts them, then they're in folders by topic at
+    the top of Today.
+- Folders can be in Today too, not only among the pinned tabs: drag one down there, or pin and unpin it from its
+  menu. Its tabs are Today tabs (no home address to go back to); *Clear* and archiving leave a folder alone.
 - *Search … for “…”* in a page's menu uses the search engine you picked in Settings. It always searched
   DuckDuckGo, the engine's own default.
 - Clicking into the address while editing it places the caret there. A click on the address bar opened over the

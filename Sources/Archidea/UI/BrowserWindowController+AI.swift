@@ -39,7 +39,8 @@ extension BrowserWindowController {
         }
     }
 
-    /// Groups Today's tabs by topic, each group a folder at the end of the pins (folders live there), its tabs in it.
+    /// Groups Today's tabs by topic, each group a folder at the top of Today with its tabs in it. They stay Today
+    /// tabs; a folder worth keeping is pinned like any tab.
     func tidyToday() {
         guard tidiesToday else { return }
         let target = space
@@ -72,7 +73,7 @@ extension BrowserWindowController {
             let tabs = group.tabs.filter { tab in target.today.contains { $0 === tab } }
             guard tabs.count >= 2 else { continue }
             let folder = SidebarItem(folder: group.name)
-            target.place(folder, in: .pinned, at: target.pinned.count)
+            target.place(folder, in: .today, at: made)
             for tab in tabs { target.move(tab, to: .folder(folder), at: folder.children.count) }
             made += 1
         }

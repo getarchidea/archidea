@@ -479,7 +479,7 @@
 "ai.feature.ask" = "Ask AI in the address bar";
 "ai.feature.ask.detail" = "⌘T, type a question, press Tab: the answer shows right there.";
 "ai.feature.tidy" = "Tidy Today";
-"ai.feature.tidy.detail" = "Groups Today's tabs into folders by topic, after you confirm. Only titles and sites are sent.";
+"ai.feature.tidy.detail" = "Groups Today's tabs into folders by topic, at the top of Today. Only titles and sites are sent.";
 "ai.note" = "Requests go straight from Archidea to the service and are paid with your key. The features ask for very little: naming 40 tabs is a fraction of a cent on the default model. Page contents are never sent, and private windows don't use AI.";
 "ai.ask.detail" = "Ask AI";
 "ai.ask.hint" = "Tab ⇥";

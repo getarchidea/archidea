@@ -111,7 +111,7 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
         }
         reflecting = true
-        restore(space.pinned)
+        restore(space.pinned + space.today)
         reflecting = false
         reflectSelection()
     }
@@ -498,6 +498,10 @@ final class SidebarList: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
             menu.addItem(ClosureMenuItem(L("item.rename")) { [weak self] in DispatchQueue.main.async { self?.rename(item) } })
             menu.addItem(ClosureMenuItem(L("folder.icon")) { [weak self] in self?.pickIcon(for: item) })
+            // A folder lives in either list, with its tabs.
+            menu.addItem(ClosureMenuItem(space.isPinned(item) ? L("tab.unpin") : L("tab.pin")) { [weak self] in
+                self?.delegate?.sidebarTogglePin(item)
+            })
             menu.addItem(.separator())
             menu.addItem(ClosureMenuItem(L("folder.delete")) { [weak self] in self?.delegate?.sidebarDeleteFolder(item) })
             return

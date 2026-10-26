@@ -1018,7 +1018,7 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     }
 
     func togglePin(_ item: SidebarItem) {
-        guard !item.isFolder, let owner = state.space(containing: item) else { return }
+        guard let owner = state.space(containing: item) else { return }
         let pinning = !owner.isPinned(item)
         owner.remove(item)
         if pinning { owner.place(item, in: .pinned, at: owner.pinned.count) } else { owner.place(item, in: .today, at: 0) }
@@ -1031,8 +1031,9 @@ final class BrowserWindowController: NSObject, ArdiaCoreWindowDelegate, TabRunti
     /// and tabs used within the last `clearKeepsMinutes`.
     var clearableTabs: [SidebarItem] {
         let keepAfter = Date().addingTimeInterval(-Double(settings.clearKeepsMinutes) * 60)
+        // A folder in Today is kept, like a pin: it was made to keep its tabs together.
         return space.today.filter { item in
-            !state.isInFront(item, in: space) && !item.allTabs.contains { group.liveTab(for: $0)?.audible == true }
+            !item.isFolder && !state.isInFront(item, in: space) && !item.allTabs.contains { group.liveTab(for: $0)?.audible == true }
                 && item.lastActive < keepAfter
         }
     }
